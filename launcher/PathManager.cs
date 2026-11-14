@@ -120,8 +120,8 @@ internal sealed class PathManager
         string? current = candidate;
         while (current is not null && current.StartsWith(Root, StringComparison.OrdinalIgnoreCase))
         {
-            var attrs = File.GetAttributes(current);
-            if (attrs.HasFlag(FileAttributes.ReparsePoint))
+            if ((Directory.Exists(current) || File.Exists(current)) &&
+                File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
                 return true;
             if (current.Equals(Root, StringComparison.OrdinalIgnoreCase))
                 break;

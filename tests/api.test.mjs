@@ -145,13 +145,16 @@ await test('the homepage and its assets are served', async () => {
   assert.match(await page.text(), /Surge Portable/);
   for (const asset of ['/styles.css', '/app.js', '/modules/api.js', '/vendor/argon2.umd.min.js', '/assets/surge.svg']) {
     const response = await fetch(base + asset);
+    const body = await response.arrayBuffer();
     assert.equal(response.status, 200, `${asset} not served`);
+    assert.ok(body.byteLength > 0, `${asset} is empty`);
   }
 });
 
 await test('static file traversal is refused', async () => {
   for (const attempt of ['/..%2fSurge.exe', '/%2e%2e/%2e%2e/Windows/win.ini']) {
     const response = await fetch(base + attempt);
+    await response.arrayBuffer();
     assert.ok(response.status === 400 || response.status === 404, `${attempt} returned ${response.status}`);
   }
 });
@@ -241,7 +244,8 @@ await test('deleting and moving require explicit confirmation', async () => {
 
 await test('copy conflicts are refused instead of overwriting', async () => {
   fs.writeFileSync(path.join(usbRoot, 'Documents', 'final.txt'), 'existing');
-  const { status } = await call('POST', '/api/files/transfer', { path: 'Downloads/guarded.txt', destination: 'Documents', move: false });
+  fs.writeFileSync(path.join(usbRoot, 'Downloads', 'final.txt'), 'incoming');
+  const { status } = await call('POST', '/api/files/transfer', { path: 'Downloads/final.txt', destination: 'Documents', move: false });
   assert.equal(status, 409);
   assert.equal(fs.readFileSync(path.join(usbRoot, 'Documents', 'final.txt'), 'utf8'), 'existing');
 });

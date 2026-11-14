@@ -1,79 +1,64 @@
 # Surge Portable 1.0
 
-A lightweight, self-contained browser workspace that runs from a 16GB USB flash drive on
-Windows 10/11 (64-bit). Insert the drive, double-click `Surge.exe`, and Firefox opens with
-the Surge workspace as its homepage. No installation, no administrator rights, no cloud
-account, no background service left running afterwards.
+Your browser and your personal workspace, together on one USB drive.
 
-**The browser and your personal workspace travel together on the USB.**
+Plug the drive into a Windows 10 or Windows 11 computer, open `Surge.exe`, and Firefox
+starts with the Surge workspace as its homepage. Nothing is installed on the computer,
+no administrator rights are needed, and no account or sign-in is required.
 
-## Features
+Unplug the drive and your notes, bookmarks, downloads and saved passwords go with you.
 
-| Feature | What it does |
+## What you get
+
+| | |
 | --- | --- |
-| Browser | Firefox with its profile, history and cookies stored on the USB |
-| Files | USB file manager: browse, open, create, rename, copy, move, delete |
-| Notes | Offline notes with autosave, search and a Markdown preview |
-| Bookmarks | Surge shortcut panel with folders, search and Firefox-compatible import/export |
-| Downloads | Every Firefox download lands in `SURGE/Downloads`, listed in the workspace |
-| Passwords | Local vault encrypted with Argon2id + AES-256-GCM, auto-lock, clipboard clearing |
-| Settings | Theme, search engine, vault timeout, clipboard timeout — stored on the USB |
+| **Browser** | Firefox, with your history and cookies kept on the USB drive |
+| **My Files** | Browse and organise the files on your drive |
+| **My Notes** | Write notes that save themselves, even with no internet |
+| **Bookmarks** | Save and organise your favourite sites |
+| **Downloads** | Everything you download lands on the drive, in one place |
+| **Passwords** | A locked vault, protected by a master password you choose |
+| **Settings** | Pick your theme, search engine and privacy timings |
 
-## Quick start (build a drive)
+The homepage works offline. You only need internet to visit websites.
 
-Requires the .NET 10 SDK, PowerShell, and 7-Zip (only to unpack Firefox).
+## Getting started
 
-```powershell
-# 1. Build the launcher and assemble a complete SURGE folder, downloading Firefox from Mozilla
-powershell -NoProfile -ExecutionPolicy Bypass -File packaging\package.ps1 -DownloadBrowser
+1. Plug in your Surge USB drive.
+2. Open the drive and double-click **Surge.exe**.
+3. Firefox opens on the Surge homepage. Start from there.
 
-# 2. Verify the package (layout, size budgets, live helper smoke test)
-powershell -NoProfile -ExecutionPolicy Bypass -File packaging\verify.ps1
+When you are finished, close Firefox and use Windows' "Safely Remove Hardware" before
+unplugging the drive. Pulling it out while Surge is open can damage your files.
 
-# 3. Copy build\SURGE to the root of the USB drive, then run Surge.exe from there
-```
+## Good to know
 
-Already have Firefox? Point the packager at it instead of downloading:
+- **Your master password cannot be recovered.** Surge never stores it anywhere. If you
+  forget it, the passwords in the vault are gone for good. Write it down and keep it
+  somewhere safe.
+- **The vault locks itself** after a few minutes of inactivity, and whenever you close
+  Surge. You can also lock it yourself at any time.
+- **Keep some free space.** Surge warns you when the drive is running low.
+- **Surge stays on the drive.** It does not scan the rest of the computer, and it will
+  not quietly create files on the host machine.
 
-```powershell
-packaging\package.ps1 -BrowserSource "D:\Downloads\FirefoxPortable"      # folder
-packaging\package.ps1 -BrowserSource "D:\Downloads\Firefox Setup 145.exe" # installer
-packaging\package.ps1 -BrowserSource "D:\Downloads\firefox.msi"           # MSI
-```
+## Privacy, honestly
 
-## Tests
+Surge keeps your things on the USB drive rather than on the computer you borrowed. It
+does not send your notes, bookmarks or passwords anywhere, and there is no cloud sync.
 
-```powershell
-node tests\vault-crypto.test.mjs   # Argon2id/AES-GCM: round trip, wrong password, tampering
-node tests\api.test.mjs            # live helper: auth, path confinement, CRUD, backups, restart
-packaging\verify.ps1               # packaged layout + smoke test
-```
+It is **not** a way to browse invisibly. Windows, antivirus software and the websites you
+visit can still leave traces on the computer, and your internet provider can still see
+your traffic. Use a private browsing window for casual privacy, but do not rely on Surge
+to hide what you do.
 
-## Repository layout
+## More help
 
-```
-launcher/    C# launcher and loopback workspace helper (published as Surge.exe)
-interface/   Surge homepage: HTML, CSS, vanilla JS modules, vendored Argon2 bundle
-packaging/   build.ps1, package.ps1, verify.ps1
-tests/       crypto and helper integration tests
-docs/        README, SECURITY, USER_GUIDE
-LICENSES/    third-party license texts
-```
+- [User guide](docs/USER_GUIDE.md) — day-to-day use and troubleshooting
+- [Security notes](docs/SECURITY.md) — how your data is protected, and the limits of that
+- [Technical notes](docs/README.md) — building a drive from source
 
-The packaged Firefox runtime is deliberately **not** committed; `package.ps1` fetches it.
+## Not included
 
-## Documentation
-
-- [docs/README.md](docs/README.md) — architecture, design decisions, build details
-- [docs/SECURITY.md](docs/SECURITY.md) — threat model, cryptography, hardening, limitations
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — day-to-day use and troubleshooting
-
-## Status
-
-Version 1.0 scope is implemented: launcher, homepage, files, notes, bookmarks, downloads,
-encrypted vault, settings, packaging and tests. Excluded by design: cloud sync, email
-client, AI assistant, app store, custom browser engine, desktop environment, autorun on
-insertion, VPN/anonymity guarantees.
-
-Surge is not a zero-trace tool. Windows, antivirus software and websites can still leave
-traces on the host computer.
+By design, Surge has no cloud sync, email client, AI assistant, app store, or VPN. It is a
+portable workspace, not an operating system.
