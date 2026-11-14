@@ -3,8 +3,10 @@ import { h, clear, toast, reportError, confirmDialog, formDialog, emptyState, fo
 import { icon } from './icons.js';
 import { getSettings } from './settings.js';
 import { createVault, unlockVault, sealVault, masterPasswordStrength, MIN_MASTER_LENGTH, VaultError, MAX_VAULT_FILE_BYTES, encryptVaultFile, decryptVaultFile } from './vault-crypto.js';
+import { isFingerprintSensorAvailable, isFingerprintEnrolled, removeFingerprintEnrollment, enrollFingerprint, unlockWithFingerprint } from './fingerprint.js';
 
 let container = null;
+let hasSensor = false;
 let state = 'unknown';
 let envelope = null;
 let key = null;
@@ -330,11 +332,11 @@ function createView() {
 function lockedView() {
   const master = h('input', { class: 'input', type: 'password', id: 'master-unlock', autocomplete: 'current-password', spellcheck: 'false', placeholder: 'Master password', 'aria-label': 'Master password' });
   const feedback = h('p', { class: 'form-error', role: 'alert', text: errorMessage });
-  const submit = h('button', { class: 'btn btn-primary btn-block', type: 'button' }, icon('lockOpen'), 'Unlock');
+  const submit = h('button', { class: 'btn btn-primary btn-block', type: 'button' }, icon('lockOpen'), 'Unlock with Password');
 
-  const attempt = async () => {
+  const attempt = async (pwd) => {
     const { signal } = session;
-    const password = master.value;
+    const password = pwd !== undefined ? pwd : master.value;
     master.value = '';
     if (!password) {
       feedback.textContent = 'Enter your master password.';
@@ -363,14 +365,39 @@ function lockedView() {
     if (state === 'locked') container?.querySelector('#master-unlock')?.focus();
   };
 
-  submit.addEventListener('click', attempt);
+  submit.addEventListener('click', () => attempt());
   master.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') { event.preventDefault(); void attempt(); }
   });
 
+  const enrolled = hasSensor && isFingerprintEnrolled();
+  let bioBtn = null;
+  if (enrolled) {
+    bioBtn = h('button', {
+      class: 'btn btn-block',
+      type: 'button',
+      style: 'margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; border-color: var(--accent); color: var(--accent);',
+      onClick: async () => {
+        try {
+          feedback.textContent = '';
+          const pwd = await unlockWithFingerprint();
+          await attempt(pwd);
+        } catch (err) {
+          state = 'locked';
+          errorMessage = err.message || 'Fingerprint verification failed.';
+          render();
+        }
+      }
+    }, icon('fingerprint', 20), 'Unlock with Fingerprint Sensor');
+  }
+
   return h('div', { class: 'card vault-card' },
     h('h2', { class: 'vault-title', text: 'Vault locked' }),
-    h('p', { class: 'vault-note', text: 'Enter your master password. It is never stored, and it cannot be recovered if you forget it.' }),
+    h('p', { class: 'vault-note', text: enrolled
+      ? 'Unlock with your fingerprint sensor, or enter your master password below.'
+      : 'Enter your master password. It is never stored, and it cannot be recovered if you forget it.' }),
+    bioBtn,
+    enrolled ? h('div', { style: 'text-align: center; margin-bottom: 12px; color: var(--text-dim); font-size: 12px;' }, '— or enter master password —') : null,
     master,
     feedback,
     submit,
@@ -543,6 +570,49 @@ function unlockedView() {
     h('section', { class: 'card vault-detail', id: 'vault-detail' }));
 }
 
+function fingerprintSettingsView() {
+  if (!hasSensor) return null;
+  const enrolled = isFingerprintEnrolled();
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' },
+      h('h2', { style: 'display: flex; align-items: center; gap: 8px;' }, icon('fingerprint', 20), 'Fingerprint sensor'),
+      enrolled
+        ? h('button', {
+            class: 'btn btn-small btn-danger',
+            type: 'button',
+            onClick: () => {
+              removeFingerprintEnrollment();
+              toast('Fingerprint sensor enrollment removed.');
+              render();
+            }
+          }, 'Remove fingerprint')
+        : h('button', {
+            class: 'btn btn-small btn-primary',
+            type: 'button',
+            onClick: async () => {
+              try {
+                const res = await formDialog({
+                  title: 'Enroll Fingerprint Sensor',
+                  message: 'Enter your master password and touch your fingerprint sensor when prompted.',
+                  confirmLabel: 'Enroll Fingerprint',
+                  fields: [
+                    { name: 'pwd', label: 'Master password', type: 'password', required: true }
+                  ]
+                });
+                if (!res?.pwd) return;
+                await enrollFingerprint(res.pwd);
+                toast('Fingerprint sensor enrolled successfully!');
+                render();
+              } catch (err) {
+                reportError(err);
+              }
+            }
+          }, icon('fingerprint', 16), 'Enroll fingerprint')),
+    h('p', { class: 'hint', text: enrolled
+      ? 'Fingerprint sensor is enrolled on this system. You can unlock your vault quickly using your fingerprint.'
+      : 'A fingerprint sensor is detected on this system. You can optionally enroll your fingerprint to unlock your vault.' }));
+}
+
 function render() {
   if (!container) return;
   clear(container);
@@ -564,7 +634,7 @@ function render() {
           h('button', { class: 'btn btn-primary', type: 'button', onClick: () => editEntry() }, icon('plus'), 'Add entry'),
           h('button', { class: 'btn btn-danger', type: 'button', onClick: () => { lock(); toast('Vault locked.'); } }, icon('lock'), 'Lock now'))
         : h('span', { class: 'chip chip-quiet', text: 'Locked by default' })),
-    unlocked ? h('div', { class: 'stack' }, view, encryptedFilesView()) : h('div', { class: 'vault-lock' }, view));
+    unlocked ? h('div', { class: 'stack' }, view, encryptedFilesView(), fingerprintSettingsView()) : h('div', { class: 'vault-lock' }, view));
 
   if (unlocked) {
     if (!selectedId || !entries.some((entry) => entry.id === selectedId)) selectedId = vaultMatches()[0]?.id ?? null;
@@ -578,6 +648,11 @@ function render() {
 export async function mount(target) {
   container = target;
   bindActivity();
+  try {
+    hasSensor = await isFingerprintSensorAvailable();
+  } catch {
+    hasSensor = false;
+  }
   if (state === 'unknown') await loadVault();
   if (state === 'unlocked' && Date.now() - lastActivity > lockMinutes() * 60000) lock();
   render();

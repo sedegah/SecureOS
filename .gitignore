@@ -1,16 +1,96 @@
-# Build output, packaged browser and downloaded installers are never committed.
+# ==============================================================================
+# Surge OS - Git Ignore Configuration
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Confidential & User Data (NEVER COMMIT)
+# ------------------------------------------------------------------------------
+Data/
+Data/**
+Downloads/
+Downloads/**
+Profile/
+Profile/**
+*.enc
+*.bak
+*.key
+*.pem
+*.pfx
+*.p12
+*.cer
+*.crt
+*.token
+*.secret
+*.credentials
+.env
+.env.*
+*.env
+*.sqlite
+*.db
+*.database
+installed.flag
+portable.flag
+
+# ------------------------------------------------------------------------------
+# Build Outputs & Binary Artifacts
+# ------------------------------------------------------------------------------
 build/
+bin/
+obj/
+dist/
+out/
 launcher/bin/
 launcher/obj/
+installer/bin/
+installer/obj/
+desktop/dist/
 
-# Editor / OS noise
+# Binaries & Bundles
+*.exe
+*.dll
+*.iso
+*.msi
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.pdb
+
+# ------------------------------------------------------------------------------
+# Node & Package Managers
+# ------------------------------------------------------------------------------
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------------------------------------------------------
+# IDE, Editor & OS Scratch
+# ------------------------------------------------------------------------------
 .vs/
+.vscode/
 .idea/
 *.user
 *.suo
+*.userosscache
+*.sln.docstates
+*.swp
+*~
+
+# Operating System Files
 Thumbs.db
 desktop.ini
+.DS_Store
+.Spotlight-V100
+.Trashes
 
-# Test scratch
+# Temporary & Log Files
+*.tmp
+*.temp
+tmp/
+temp/
+logs/
+*.log
 tests/.tmp/
-node_modules/

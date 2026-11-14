@@ -1,7 +1,74 @@
 (() => {
   "use strict";
 
-  const api = window.surgeBrowser;
+  function createStandaloneBrowser() {
+    let nextId = 1;
+    let tabs = [
+      { id: nextId++, title: "Surge Start", url: "", loading: false, canBack: false, canForward: false, error: "" }
+    ];
+    let activeId = 1;
+    let downloadCount = 0;
+    const subscribers = new Set();
+    const notify = () => {
+      const state = { tabs: [...tabs], activeId, downloadCount };
+      for (const sub of subscribers) sub(state);
+      return state;
+    };
+    return {
+      state: async () => ({ tabs: [...tabs], activeId, downloadCount }),
+      command: async (action, payload = {}) => {
+        if (action === "newTab") {
+          const id = nextId++;
+          tabs.push({ id, title: payload.url || "New tab", url: payload.url || "", loading: false, canBack: false, canForward: false, error: "" });
+          activeId = id;
+        } else if (action === "selectTab") {
+          activeId = payload.id;
+        } else if (action === "closeTab") {
+          tabs = tabs.filter(t => t.id !== payload.id);
+          if (activeId === payload.id) activeId = tabs[tabs.length - 1]?.id || null;
+          if (!tabs.length) {
+            const id = nextId++;
+            tabs.push({ id, title: "New tab", url: "", loading: false, canBack: false, canForward: false, error: "" });
+            activeId = id;
+          }
+        } else if (action === "navigate") {
+          const tab = tabs.find(t => t.id === activeId);
+          if (tab) {
+            tab.url = payload.url;
+            try { tab.title = payload.url ? new URL(payload.url, location.href).hostname : "New tab"; }
+            catch { tab.title = payload.url; }
+            tab.canBack = true;
+          }
+        } else if (action === "back") {
+          const tab = tabs.find(t => t.id === activeId);
+          if (tab) tab.canBack = false;
+        } else if (action === "forward") {
+          const tab = tabs.find(t => t.id === activeId);
+          if (tab) tab.canForward = false;
+        } else if (action === "workspace") {
+          window.location.href = "/#/home";
+        } else if (action === "downloads") {
+          window.location.href = "/#/downloads";
+        } else if (action === "bookmark") {
+          const tab = tabs.find(t => t.id === activeId);
+          if (tab && tab.url) {
+            try {
+              const { addItem } = await import("/modules/bookmarks.js");
+              await addItem({ title: tab.title, url: tab.url });
+            } catch {}
+          }
+        }
+        return notify();
+      },
+      subscribe: (callback) => {
+        subscribers.add(callback);
+        callback({ tabs: [...tabs], activeId, downloadCount });
+        return () => subscribers.delete(callback);
+      }
+    };
+  }
+
+  const api = window.surgeBrowser || createStandaloneBrowser();
   const byId = (id) => document.getElementById(id);
   const elements = {
     tabs: byId("tab-list"),

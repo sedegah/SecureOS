@@ -15,6 +15,7 @@
     <Product>Surge Portable</Product>
     <AssemblyTitle>Surge Portable Launcher</AssemblyTitle>
     <Company>Surge</Company>
+    <ApplicationIcon>..\desktop\assets\icon.ico</ApplicationIcon>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

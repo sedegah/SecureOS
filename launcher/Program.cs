@@ -15,6 +15,7 @@ internal static class Program
             if (rootIndex >= 0 && (!noBrowser || rootIndex + 1 >= args.Length))
                 return Fail("A workspace root is supported only with --no-browser and needs a path.", 2);
             PathManager paths = PathManager.Detect(rootIndex >= 0 ? args[rootIndex + 1] : null);
+            paths.IsInstalled = args.Contains("--installed") || File.Exists(Path.Combine(paths.Root, "installed.flag"));
             ValidationResult validation = StartupValidator.Validate(paths, requireBrowser: !noBrowser);
             if (!validation.Ok)
                 return Fail(validation.Message, 2);
@@ -31,12 +32,21 @@ internal static class Program
 
             Process? browser = null;
             if (noBrowser)
+            {
                 Console.WriteLine("SURGE_URL=" + helper.HomepageUrl);
+            }
+            else if (validation.BrowserExecutable is not null)
+            {
+                browser = BrowserLauncher.Launch(paths, validation.BrowserExecutable, helper.Policy, helper.HomepageUrl);
+            }
             else
-                browser = BrowserLauncher.Launch(paths, validation.BrowserExecutable!, helper.Policy, helper.HomepageUrl);
+            {
+                // Firefox is not bundled or required: open default/system browser directly
+                Process.Start(new ProcessStartInfo(helper.HomepageUrl) { UseShellExecute = true });
+            }
 
-            helper.BrowserRunning = browser is not null;
-            RunUntilBrowserCloses(helper, ref browser, paths, validation.BrowserExecutable);
+            helper.BrowserRunning = browser is not null || !noBrowser;
+            RunUntilBrowserCloses(helper, ref browser, paths, validation.BrowserExecutable, noBrowser);
 
             if (browser is not null && browser.HasExited && browser.ExitCode != 0)
                 return Fail($"Firefox closed unexpectedly (exit code {browser.ExitCode}).\n\nCheck that the Browser folder on the USB drive is complete, then start Surge again.", 3);
@@ -52,7 +62,7 @@ internal static class Program
     /// The helper stays alive only while Firefox is open, because native USB file operations
     /// genuinely need it. It exits with the browser and leaves nothing running when idle.
     /// A VPN change restarts Firefox in place so the helper, its port and its token survive.
-    private static void RunUntilBrowserCloses(LocalHelper helper, ref Process? browser, PathManager paths, string? browserExecutable)
+    private static void RunUntilBrowserCloses(LocalHelper helper, ref Process? browser, PathManager paths, string? browserExecutable, bool noBrowser)
     {
         DateTime? browserClosedAt = null;
 
@@ -84,6 +94,12 @@ internal static class Program
                 {
                     browserClosedAt = null;
                 }
+            }
+            else if (!noBrowser)
+            {
+                // When opened in system browser without a managed process, exit after 2 minutes of inactivity
+                if (DateTime.UtcNow.Ticks - helper.LastHeartbeatTicks > TimeSpan.FromMinutes(2).Ticks)
+                    return;
             }
 
             Thread.Sleep(1000);

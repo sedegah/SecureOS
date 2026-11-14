@@ -11,6 +11,7 @@ import * as vpn from './modules/vpn.js';
 
 const ROUTES = [
   { id: 'home', label: 'Home', icon: 'home', mount: renderHome },
+  { id: 'browser', label: 'Browser', icon: 'globe', mount: renderBrowserSection },
   { id: 'files', label: 'Files', icon: 'files', mount: files.mount },
   { id: 'notes', label: 'Notes', icon: 'notes', mount: notes.mount },
   { id: 'bookmarks', label: 'Bookmarks', icon: 'bookmarks', mount: bookmarks.mount },
@@ -22,7 +23,7 @@ const ROUTES = [
 
 const TILES = [
   { route: 'browser', icon: 'globe', title: 'Surge Browser', sub: 'Open the web browser' },
-  { route: 'files', icon: 'files', title: 'My Files', sub: 'USB documents' },
+  { route: 'files', icon: 'files', title: 'My Files', sub: 'Documents and files' },
   { route: 'notes', icon: 'notes', title: 'My Notes', sub: 'Personal notes' },
   { route: 'bookmarks', icon: 'bookmarks', title: 'Bookmarks', sub: 'Saved websites' },
   { route: 'downloads', icon: 'downloads', title: 'Downloads', sub: 'Downloaded files' },
@@ -71,12 +72,35 @@ function markActiveRoute() {
 }
 
 function navigate(route) {
-  if (route === 'browser') {
-    if (window.surgeDesktop) void window.surgeDesktop.openBrowser().catch(reportError);
-    else toast('Launch the standalone Surge desktop to open Surge Browser.', 'warn');
+  if (route === 'browser' && window.surgeDesktop) {
+    void window.surgeDesktop.openBrowser().catch(reportError);
     return;
   }
   location.hash = `#/${route}`;
+}
+
+async function renderBrowserSection(target) {
+  clear(target);
+  const isDesktop = Boolean(window.surgeDesktop);
+  target.append(
+    h('header', { class: 'section-head' },
+      h('div', {},
+        h('h1', { text: 'Surge Browser' }),
+        h('p', { class: 'section-sub', text: 'Independent Chromium browser with isolated profiles, USB downloads, and proxy support.' })),
+      h('div', { class: 'section-actions' },
+        h('button', {
+          class: 'btn btn-primary', type: 'button',
+          onClick: () => {
+            if (isDesktop) void window.surgeDesktop.openBrowser().catch(reportError);
+            else window.open('browser/index.html', '_blank');
+          },
+        }, icon('globe'), isDesktop ? 'Open Browser Window' : 'Launch Browser Window'))),
+    h('div', { class: 'card', style: 'padding: 0; overflow: hidden; height: 620px; border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 6px;' },
+      h('iframe', {
+        src: 'browser/index.html',
+        style: 'width: 100%; height: 100%; border: none; display: block;',
+        title: 'Surge Browser',
+      })));
 }
 
 let routing = Promise.resolve();
@@ -118,17 +142,22 @@ function updateStorage(status) {
   const block = document.getElementById('storage');
   const chip = document.getElementById('usb-chip');
   document.getElementById('status-path').textContent = status?.usbRoot ?? '';
+  const label = document.getElementById('storage-label');
+  if (label) label.textContent = status?.installed ? 'Disk' : 'USB';
 
-  if (!status?.usbPresent) {
+  if (status?.installed) {
+    chip.className = 'chip chip-ok';
+    chip.textContent = 'System ready';
+  } else if (!status?.usbPresent) {
     chip.className = 'chip chip-error';
     chip.textContent = 'USB disconnected';
     block.hidden = true;
     showSpaceBanner(null);
     return;
+  } else {
+    chip.className = 'chip chip-ok';
+    chip.textContent = 'USB ready';
   }
-
-  chip.className = 'chip chip-ok';
-  chip.textContent = 'USB ready';
 
   if (!storage) {
     block.hidden = true;

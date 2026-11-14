@@ -6,12 +6,23 @@ const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { webUrl, navigationTarget } = require('./navigation.cjs');
 
-const root = app.isPackaged ? path.dirname(process.execPath) : path.resolve(process.env.SURGE_DATA_ROOT || path.join(__dirname, '../build/SurgeDesktop-data'));
+const isInstalled = app.isPackaged && !fs.existsSync(path.join(path.dirname(process.execPath), 'portable.flag'));
+let root;
 if (!app.isPackaged) {
+  root = path.resolve(process.env.SURGE_DATA_ROOT || path.join(__dirname, '../build/SurgeDesktop-data'));
   fs.mkdirSync(root, { recursive: true });
   fs.cpSync(path.join(__dirname, '../interface'), path.join(root, 'Interface'), { recursive: true });
+} else if (isInstalled) {
+  root = path.join(app.getPath('appData'), 'Surge');
+  fs.mkdirSync(root, { recursive: true });
+  const appInterface = path.join(path.dirname(process.execPath), 'Interface');
+  if (fs.existsSync(appInterface)) {
+    fs.cpSync(appInterface, path.join(root, 'Interface'), { recursive: true });
+  }
+} else {
+  root = path.dirname(process.execPath);
 }
-if (!fs.existsSync(root)) throw new Error('The Surge drive is missing.');
+if (!fs.existsSync(root)) throw new Error('The Surge workspace is missing.');
 const profile = path.join(root, 'Data', 'BrowserProfile');
 fs.mkdirSync(profile, { recursive: true });
 app.setPath('userData', profile);
@@ -46,7 +57,9 @@ async function helperCall(method, endpoint, data) {
 
 async function startHelper() {
   const executable = app.isPackaged ? path.join(process.resourcesPath, 'helper', 'Surge.exe') : path.join(__dirname, '../build/publish/Surge.exe');
-  helper = spawn(executable, ['--no-browser', '--root', root], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const helperArgs = ['--no-browser', '--root', root];
+  if (isInstalled) helperArgs.push('--installed');
+  helper = spawn(executable, helperArgs, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise((resolve, reject) => {
     let output = '';
     const timer = setTimeout(() => reject(new Error('The Surge storage helper did not start.')), 30000);
@@ -181,7 +194,9 @@ function closeTab(id) {
 async function openBrowser(url = '') {
   if (typeof url !== 'string' || (url && !webUrl(url))) throw new Error('Only HTTP and HTTPS websites can be opened.');
   if (!browserWindow) {
+    const iconPath = path.join(__dirname, 'assets', 'icon.png');
     browserWindow = new BrowserWindow({ title: 'Surge Browser', width: 1280, height: 850, minWidth: 720, minHeight: 480, backgroundColor: '#f0f0f0', autoHideMenuBar: true,
+      icon: fs.existsSync(iconPath) ? iconPath : undefined,
       webPreferences: { preload: path.join(__dirname, 'browser-preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
     browserWindow.removeMenu();
     browserWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -254,9 +269,11 @@ ipcMain.handle('surge:choose-vault-export', async (event, name) => {
   });
   if (choice.canceled || !choice.filePath || revision !== exportRevision) return null;
   const resolved = path.resolve(choice.filePath);
-  const relative = path.relative(root, resolved).replaceAll('\\', '/');
-  if (/^(Data|Interface|resources|locales)(\/|$)/i.test(relative) || (relative === path.basename(relative) && relative !== '..'))
-    throw new Error('Choose Downloads or a folder outside the Surge runtime and data folders.');
+  if (!isInstalled) {
+    const relative = path.relative(root, resolved).replaceAll('\\', '/');
+    if (/^(Data|Interface|resources|locales)(\/|$)/i.test(relative) || (relative === path.basename(relative) && relative !== '..'))
+      throw new Error('Choose Downloads or a folder outside the Surge runtime and data folders.');
+  }
   vaultExport = { ticket: randomUUID(), destination: resolved, expires: Date.now() + 60000 };
   return vaultExport.ticket;
 });
@@ -324,6 +341,18 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (workspace) { workspace.restore(); workspace.show(); workspace.focus(); } });
   app.whenReady().then(async () => {
+    const iconPath = path.join(__dirname, 'assets', 'icon.png');
+    let splash = null;
+    try {
+      splash = new BrowserWindow({
+        width: 640, height: 357, frame: false, transparent: true, resizable: false, center: true,
+        show: true, alwaysOnTop: true, skipTaskbar: false,
+        icon: fs.existsSync(iconPath) ? iconPath : undefined,
+        webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }
+      });
+      await splash.loadFile(path.join(__dirname, 'splash.html'));
+    } catch {}
+
     await startHelper();
     browserSession = session.fromPartition('persist:surge-web', { cache: true });
     browserSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
@@ -331,6 +360,8 @@ else {
     installDownloads();
     await configureProxy(await helperCall('GET', '/api/vpn/state'));
     workspace = new BrowserWindow({ title: 'Surge Workspace', width: 1280, height: 850, minWidth: 760, minHeight: 520, backgroundColor: '#f0f0f0', autoHideMenuBar: true,
+      show: false,
+      icon: fs.existsSync(iconPath) ? iconPath : undefined,
       webPreferences: { preload: path.join(__dirname, 'workspace-preload.cjs'), partition: 'surge-workspace', sandbox: true, contextIsolation: true, nodeIntegration: false } });
     workspace.removeMenu();
     workspace.webContents.session.setPermissionRequestHandler((contents, permission, callback) => callback(contents === workspace?.webContents && permission === 'clipboard-sanitized-write'));
@@ -342,6 +373,11 @@ else {
     workspace.on('close', () => { if (browserWindow) browserWindow.close(); });
     workspace.on('closed', () => { workspace = null; app.quit(); });
     await workspace.loadURL(homeUrl);
+    setTimeout(() => {
+      workspace.show();
+      workspace.focus();
+      if (splash && !splash.isDestroyed()) splash.close();
+    }, 1200);
   }).catch(error => { dialog.showErrorBox('Surge could not start', error.message); app.quit(); });
 }
 

@@ -24,20 +24,9 @@ internal static class StartupValidator
         string homepage = Path.Combine(paths.InterfaceDir, "index.html");
         if (!File.Exists(homepage))
             return ValidationResult.Failure(
-                $"The Surge interface is missing or damaged:\n{homepage}\n\nRestore the Interface folder from your Surge backup or reinstall Surge on the USB drive.");
-
-        if (!requireBrowser)
-            return ValidationResult.Success(null);
+                $"The Surge interface is missing or damaged:\n{homepage}\n\nRestore the Interface folder from your Surge backup or reinstall Surge.");
 
         string? browser = FindBrowser(paths);
-        if (browser is null)
-        {
-            string expected = string.Join("\n", BrowserCandidates.Select(c => Path.Combine(paths.BrowserDir, c)));
-            return ValidationResult.Failure(
-                "Firefox could not be found on this USB drive. Expected one of:\n\n" + expected +
-                "\n\nRun packaging\\package.ps1 to add the browser, or copy a Firefox Portable distribution into the Browser folder.");
-        }
-
         return ValidationResult.Success(browser);
     }
 

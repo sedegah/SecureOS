@@ -115,8 +115,9 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
         bool present = paths.UsbPresent;
         var payload = new JsonObject
         {
-            ["app"] = "Surge Portable",
+            ["app"] = paths.IsInstalled ? "Surge Desktop" : "Surge Portable",
             ["version"] = Version,
+            ["installed"] = paths.IsInstalled,
             ["usbPresent"] = present,
             ["usbRoot"] = paths.Root,
             ["paths"] = new JsonObject
@@ -346,6 +347,24 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
             default:
                 return ApiResponse.Error(404, "not-found", "Unknown file operation.");
         }
+    }
+
+    private string ResolveOrdinaryPath(string? relative, bool allowRoot = false)
+    {
+        if (string.IsNullOrWhiteSpace(relative))
+        {
+            if (allowRoot)
+                return paths.Root;
+            throw new FileOperationException("A path is required.", 400);
+        }
+
+        if (!paths.TryResolve(relative, out string fullPath, out string error))
+            throw new FileOperationException(error, 400);
+
+        if (!allowRoot && fullPath.Equals(paths.Root, StringComparison.OrdinalIgnoreCase))
+            throw new FileOperationException("The root folder cannot be modified.", 400);
+
+        return fullPath;
     }
 
     private static ApiResponse Ok() => ApiResponse.Json(200, new JsonObject { ["ok"] = true });

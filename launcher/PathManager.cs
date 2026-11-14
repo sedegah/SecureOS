@@ -32,6 +32,7 @@ internal sealed class PathManager
     public string DownloadsDir => Path.Combine(Root, "Downloads");
 
     public bool UsbPresent => Directory.Exists(Root);
+    public bool IsInstalled { get; set; }
 
     public static PathManager Detect(string? root = null)
     {
@@ -96,28 +97,43 @@ internal sealed class PathManager
         if (string.IsNullOrWhiteSpace(relative))
             return true;
 
-        if (relative.Contains('\0') || relative.Contains(':') || relative.StartsWith('/') || relative.StartsWith('\\'))
+        if (relative.Contains('\0'))
+        {
+            error = "Invalid path characters.";
+            return false;
+        }
+
+        if (IsInstalled && Path.IsPathFullyQualified(relative))
+        {
+            if (File.Exists(relative) || Directory.Exists(relative))
+            {
+                fullPath = Path.GetFullPath(relative);
+                return true;
+            }
+        }
+
+        if (!IsInstalled && (relative.Contains(':') || relative.StartsWith('/') || relative.StartsWith('\\')))
         {
             error = "Only paths inside the Surge USB folder are allowed.";
             return false;
         }
 
         string[] parts = relative.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Any(p => p == ".."))
+        if (!IsInstalled && parts.Any(p => p == ".."))
         {
             error = "Paths may not leave the Surge USB folder.";
             return false;
         }
 
         string candidate = Path.GetFullPath(Path.Combine(Root, Path.Combine(parts)));
-        if (!candidate.Equals(Root, StringComparison.OrdinalIgnoreCase) &&
+        if (!IsInstalled && !candidate.Equals(Root, StringComparison.OrdinalIgnoreCase) &&
             !candidate.StartsWith(Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
             error = "Paths may not leave the Surge USB folder.";
             return false;
         }
 
-        if (ContainsLink(candidate))
+        if (!IsInstalled && ContainsLink(candidate))
         {
             error = "Linked folders are not supported by the Surge file manager.";
             return false;

@@ -19,6 +19,7 @@ const { spawnSync } = require('node:child_process');
     asar: true, prune: true, overwrite: true,
     extraResource: [path.join(repo, 'build/desktop-resources/helper')],
     appCopyright: 'Surge',
+    icon: path.join(repo, 'desktop/assets/icon.ico'),
     win32metadata: { ProductName: 'Surge', FileDescription: 'Surge workspace and browser' },
   });
   for (const output of outputs) {
