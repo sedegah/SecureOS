@@ -7,14 +7,12 @@ internal static class BrowserLauncher
 {
     /// Firefox reads user.js at startup, so runtime-resolved USB paths are written on every launch
     /// instead of being stored as absolute paths in Surge's own settings.
-    public static void WritePortablePreferences(PathManager paths, string homepageUrl)
+    public static void WritePortablePreferences(PathManager paths, BrowserPolicy policy, string homepageUrl)
     {
         Directory.CreateDirectory(paths.ProfileDir);
 
-        var prefs = new (string Key, string Value)[]
+        var prefs = new List<(string Key, string Value)>
         {
-            ("browser.startup.homepage", homepageUrl),
-            ("browser.startup.page", "1"),
             ("browser.download.dir", paths.DownloadsDir),
             ("browser.download.folderList", "2"),
             ("browser.download.useDownloadDir", "true"),
@@ -47,6 +45,9 @@ internal static class BrowserLauncher
             ("browser.ping-centre.telemetry", "false"),
         };
 
+        prefs.AddRange(policy.Preferences(homepageUrl));
+        policy.WritePolicies(paths);
+
         var text = new StringBuilder("// Managed by Surge Portable. Rewritten on every launch; edit Data/Settings instead.\n");
         foreach ((string key, string value) in prefs)
         {
@@ -58,9 +59,9 @@ internal static class BrowserLauncher
         File.WriteAllText(Path.Combine(paths.ProfileDir, "user.js"), text.ToString(), new UTF8Encoding(false));
     }
 
-    public static Process Launch(PathManager paths, string browserExecutable, string homepageUrl)
+    public static Process Launch(PathManager paths, string browserExecutable, BrowserPolicy policy, string homepageUrl)
     {
-        WritePortablePreferences(paths, homepageUrl);
+        WritePortablePreferences(paths, policy, homepageUrl);
 
         var info = new ProcessStartInfo(browserExecutable)
         {

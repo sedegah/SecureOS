@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Surge VPN panel</title>
+
+</head>
+<body>
+<x-dc>
+<helmet>
+<!-- fonts stripped -->
+<style>
+body{margin:0;font-family:'Segoe UI',system-ui,Arial,sans-serif}
+code,pre,.mono{font-family:Consolas,'Cascadia Mono','Courier New',monospace}
+button{font-family:inherit;cursor:pointer}
+button:hover{filter:brightness(.94)}
+button:focus-visible{outline:2px solid #1546E6;outline-offset:3px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+</style>
+</helmet>
+<div style="width:1280px;height:780px;box-sizing:border-box;background:#fff;color:#0B1B3A;padding:32px 56px;display:flex;flex-direction:column">
+
+<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:22px;border-bottom:1px solid #E1E8F5">
+<div style="font-size:22px;font-weight:800;letter-spacing:.18em;color:#E3162B;">SURGE VPN</div>
+<div style="font-size:12px;color:#1546E6;border:1px solid #1546E666;border-radius:99px;padding:7px 14px;letter-spacing:.08em">BROWSER ONLY · FIREFOX</div>
+</div>
+
+<div style="flex:1;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:56px;min-height:0">
+
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:22px;border-right:1px solid #E1E8F5;padding-right:56px">
+<button sc-camel-on-click="{{mainAction}}" aria-label="{{btnLabel}}" style="width:210px;height:210px;border-radius:50%;background:#fff;border:3px solid {{tone}};color:{{tone}};display:flex;align-items:center;justify-content:center;box-shadow:0 10px 40px {{tone}}33,inset 0 0 40px {{tone}}22;animation:{{anim}}">
+<svg width="80" height="80" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8"></path><path d="M6.3 6.8a8 8 0 1 0 11.4 0"></path></svg>
+</button>
+<div style="font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:{{tone}}">{{badge}}</div>
+<div>
+<h1 style="margin:0 0 12px;font-size:40px;line-height:1.1;font-weight:800;">{{head}}</h1>
+<p style="margin:0 auto;font-size:15px;line-height:1.6;color:#4A5B7A;max-width:460px">{{sub}}</p>
+</div>
+<sc-if value="{{showConfirm}}" hint-placeholder-val="{{ false }}">
+<div style="border:1px solid #E3162B;border-radius:12px;padding:16px 20px;display:flex;gap:18px;align-items:center">
+<div style="font-size:13px;line-height:1.5;text-align:left">Disconnect? Your real IP will be<br>visible to websites.</div>
+<div style="display:flex;gap:10px">
+<button sc-camel-on-click="{{confirmYes}}" style="min-height:44px;padding:0 16px;border-radius:10px;border:0;background:#E3162B;color:#fff;font-weight:700;font-size:13px">DISCONNECT</button>
+<button sc-camel-on-click="{{confirmNo}}" style="min-height:44px;padding:0 16px;border-radius:10px;border:1px solid #D0DAEE;background:transparent;color:#0B1B3A;font-size:13px">STAY</button>
+</div>
+</div>
+</sc-if>
+</div>
+
+<div style="display:flex;flex-direction:column;justify-content:center;gap:34px">
+
+<div>
+<div style="font-size:12px;letter-spacing:.14em;color:#4A5B7A;margin-bottom:12px">SERVER</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{servers}}" as="s" hint-placeholder-count="4">
+<button sc-camel-on-click="{{s.pick}}" aria-pressed="{{s.on}}" style="min-height:50px;text-align:left;padding:0 18px;border-radius:10px;font-size:14px;color:#0B1B3A;border:{{s.border}};background:{{s.bg}};display:flex;align-items:center;gap:14px">
+<span style="width:12px;height:12px;border-radius:50%;border:2px solid {{s.dot}};background:{{s.dotFill}};flex:none"></span>{{s.name}}
+</button>
+</sc-for>
+</div>
+</div>
+
+<div>
+<div style="font-size:12px;letter-spacing:.14em;color:#4A5B7A;margin-bottom:12px">VERIFICATION</div>
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">
+<sc-for list="{{checks}}" as="c" hint-placeholder-count="4">
+<div style="border:1px solid #D0DAEE;border-radius:10px;background:#F4F7FC;padding:14px 8px;text-align:center">
+<div style="font-size:20px;font-weight:700;color:{{c.color}};line-height:1">{{c.glyph}}</div>
+<div style="font-size:12px;margin-top:8px">{{c.name}}</div>
+<div style="font-size:11px;margin-top:4px;color:{{c.color}}">{{c.text}}</div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div>
+<div style="font-size:12px;letter-spacing:.14em;color:#4A5B7A;margin-bottom:6px">SETTINGS</div>
+<sc-for list="{{toggles}}" as="t" hint-placeholder-count="2">
+<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-top:1px solid #E1E8F5;font-size:14px">
+<span>{{t.name}}</span>
+<button sc-camel-on-click="{{t.flip}}" role="switch" aria-checked="{{t.on}}" aria-label="{{t.name}}" style="width:56px;min-height:48px;background:transparent;border:0;padding:0;display:flex;align-items:center;justify-content:flex-end">
+<span style="width:46px;height:26px;border-radius:99px;background:{{t.track}};display:flex;align-items:center;padding:0 4px;box-sizing:border-box;justify-content:{{t.align}};box-shadow:{{t.glow}}"><span style="width:18px;height:18px;border-radius:50%;background:{{t.knob}}"></span></span>
+</button>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;gap:24px;padding-top:18px;border-top:1px solid #E1E8F5">
+<div style="font-size:12px;color:#4A5B7A">Only Surge Firefox is covered. Other apps use your normal connection. Not an anonymity tool.</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end">
+<span style="font-size:11px;color:#4A5B7A;letter-spacing:.1em;margin-right:4px">PREVIEW</span>
+<sc-for list="{{states}}" as="p" hint-placeholder-count="10">
+<button sc-camel-on-click="{{p.pick}}" aria-pressed="{{p.active}}" style="min-height:32px;padding:0 10px;border-radius:99px;font-size:11px;color:#0B1B3A;border:{{p.border}};background:{{p.bg}}">{{p.name}}</button>
+</sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+
+
+
+</body></html>

@@ -89,14 +89,19 @@ function dialogShell({ title, body, actions, labelledBy }) {
   return dialog;
 }
 
-export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false }) {
+export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false, signal = null }) {
+  if (signal?.aborted) return Promise.resolve(false);
   return new Promise((resolve) => {
     let settled = false;
+    const abort = () => finish(false);
     const finish = (value) => {
       if (settled) return;
       settled = true;
-      resolve(value);
+      signal?.removeEventListener('abort', abort);
+      dialog.textContent = '';
       dialog.close();
+      dialog.remove();
+      resolve(value);
     };
     const dialog = dialogShell({
       title,
@@ -111,6 +116,9 @@ export function confirmDialog({ title, message, confirmLabel = 'Confirm', danger
       event.preventDefault();
       finish(false);
     });
+    dialog.addEventListener('close', () => finish(false));
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) { finish(false); return; }
     dialog.showModal();
     dialog.querySelector('.dialog-actions button').focus();
   });
@@ -155,7 +163,23 @@ export function emptyState(message) {
   return h('p', { class: 'empty', text: message });
 }
 
-export function formDialog({ title, fields, confirmLabel = 'Save', message = null }) {
+export function cardLabel(text) {
+  return h('p', { class: 'card-label', text });
+}
+
+export function switchRow({ label, checked = false, disabled = false, hint = null, onChange = null }) {
+  const input = h('input', { type: 'checkbox', disabled, 'aria-label': label });
+  input.checked = checked;
+  if (onChange) input.addEventListener('change', () => onChange(input.checked));
+  return h('div', { class: 'switch-row' },
+    h('div', { class: 'switch-row-text' },
+      h('span', { class: 'switch-row-label', text: label }),
+      hint ? h('span', { class: 'field-hint', text: hint }) : null),
+    h('label', { class: 'check' }, input));
+}
+
+export function formDialog({ title, fields, confirmLabel = 'Save', message = null, signal = null }) {
+  if (signal?.aborted) return Promise.resolve(null);
   return new Promise((resolve) => {
     let settled = false;
     const inputs = new Map();
@@ -188,17 +212,24 @@ export function formDialog({ title, fields, confirmLabel = 'Save', message = nul
           field.hint ? h('span', { class: 'field-hint', text: field.hint }) : null);
       }));
 
+    const abort = () => finish(null);
     const finish = (result) => {
       if (settled) return;
       settled = true;
-      resolve(result);
+      signal?.removeEventListener('abort', abort);
+      for (const { control } of inputs.values()) {
+        control.value = '';
+        control.removeAttribute('value');
+      }
       dialog.close();
+      dialog.remove();
+      resolve(result);
     };
 
     const submit = () => {
       const values = {};
       for (const [name, { control, field }] of inputs) {
-        const value = control.value.trim();
+        const value = field.type === 'password' ? control.value : control.value.trim();
         if (field.required && !value) {
           control.focus();
           toast(`${field.label} is required.`, 'error');
@@ -229,6 +260,12 @@ export function formDialog({ title, fields, confirmLabel = 'Save', message = nul
       event.preventDefault();
       finish(null);
     });
+    dialog.addEventListener('close', () => finish(null));
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) {
+      finish(null);
+      return;
+    }
     dialog.showModal();
     inputs.values().next().value?.control.focus();
   });

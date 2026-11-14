@@ -7,7 +7,7 @@ namespace SurgePortable;
 
 /// Minimal loopback-only HTTP server. It uses a raw socket instead of http.sys so that Surge
 /// needs no administrator rights, no URL reservation and no host installation.
-internal sealed class LocalHelper : IDisposable
+internal sealed class LocalHelper : IDisposable, IBrowserControl
 {
     private const int MaxHeaderBytes = 16 * 1024;
     private const long MaxBodyBytes = PathManager.MaxDocumentBytes + 1024 * 1024;
@@ -24,13 +24,12 @@ internal sealed class LocalHelper : IDisposable
         [".jpg"] = "image/jpeg",
         [".ico"] = "image/x-icon",
         [".wasm"] = "application/wasm",
-        [".woff2"] = "font/woff2",
         [".txt"] = "text/plain; charset=utf-8",
     };
 
-    private const string ContentSecurityPolicy =
+    private const string ContentSecurityPolicyBase =
         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; " +
-        "connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+        "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
     private readonly PathManager paths;
     private readonly Api api;
@@ -38,13 +37,18 @@ internal sealed class LocalHelper : IDisposable
     private readonly TcpListener listener;
     private readonly CancellationTokenSource shutdown = new();
     private readonly SemaphoreSlim concurrency = new(16, 16);
+    private readonly DocumentStore documents;
     private long lastHeartbeatTicks = DateTime.UtcNow.Ticks;
+    private volatile bool restartRequested;
+    private BrowserPolicy policy;
 
     public LocalHelper(PathManager paths, string token)
     {
         this.paths = paths;
         this.token = token;
-        api = new Api(paths, new DocumentStore(paths), new FileOperations(paths));
+        documents = new DocumentStore(paths);
+        policy = BrowserPolicy.Load(documents);
+        api = new Api(paths, documents, new FileOperations(paths), this);
         listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         Port = ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -54,6 +58,22 @@ internal sealed class LocalHelper : IDisposable
     public int Port { get; }
     public string Origin => $"http://127.0.0.1:{Port}";
     public string HomepageUrl => $"{Origin}/#k={token}";
+    public bool BrowserRunning { get; set; }
+    public bool RestartRequested => restartRequested;
+    public BrowserPolicy Policy => policy;
+
+    /// Firefox only reads proxy preferences at startup, so applying a VPN change means
+    /// restarting the browser. The helper and its token survive, so the workspace reconnects.
+    public void RequestRestart()
+    {
+        policy = BrowserPolicy.Load(documents);
+        restartRequested = true;
+    }
+
+    public void ClearRestart() => restartRequested = false;
+
+    private string ContentSecurityPolicy =>
+        $"{ContentSecurityPolicyBase}; connect-src 'self' {policy.VerifyOrigin}";
 
     public static string CreateToken() => Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
 
@@ -261,7 +281,7 @@ internal sealed class LocalHelper : IDisposable
         return -1;
     }
 
-    private static async Task WriteResponseAsync(NetworkStream stream, ApiResponse response)
+    private async Task WriteResponseAsync(NetworkStream stream, ApiResponse response)
     {
         var head = new StringBuilder();
         head.Append("HTTP/1.1 ").Append(response.Status).Append(' ').Append(StatusText(response.Status)).Append("\r\n");

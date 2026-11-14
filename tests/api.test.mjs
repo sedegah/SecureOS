@@ -32,7 +32,7 @@ async function test(name, fn) {
       return;
     }
     failed += 1;
-    console.log(`  FAIL ${name}\n       ${error.stack?.split('\n').slice(0, 3).join('\n       ')}`);
+    console.log(`  FAIL ${name}\n       ${error.message}\n       ${error.stack?.split('\n')[1]?.trim() ?? ''}`);
   }
 }
 
@@ -280,6 +280,97 @@ await test('oversized documents are refused', async () => {
   const huge = { version: 1, blob: 'x'.repeat(9 * 1024 * 1024) };
   const response = await fetch(`${base}/api/vault`, { method: 'PUT', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify(huge) });
   assert.equal(response.status, 413);
+});
+
+const proxy = { id: 's1', name: 'Home proxy', scheme: 'socks5', host: 'proxy.example.com', port: 1080 };
+
+await test('vpn state starts disconnected with a safe verification address', async () => {
+  const { status, json } = await call('GET', '/api/vpn/state');
+  assert.equal(status, 200);
+  assert.equal(json.enabled, false);
+  assert.equal(json.active, false);
+  assert.equal(json.blocked, false);
+  assert.equal(json.failClosed, true);
+  assert.equal(json.verifyUrl, 'https://api.ipify.org?format=json');
+  assert.deepEqual(json.servers, []);
+});
+
+await test('applying vpn settings requires confirmation', async () => {
+  const { status, json } = await call('POST', '/api/vpn/apply', { enabled: false, servers: [] });
+  assert.equal(status, 400);
+  assert.equal(json.error, 'confirm-required');
+});
+
+await test('vpn apply rejects unusable proxy servers', async () => {
+  for (const bad of [
+    { ...proxy, scheme: 'http' },
+    { ...proxy, port: 0 },
+    { ...proxy, port: 70000 },
+    { ...proxy, host: 'not a host' },
+    { ...proxy, host: '' },
+    { ...proxy, id: '' },
+  ]) {
+    const { status, json } = await call('POST', '/api/vpn/apply', { confirm: true, servers: [bad] });
+    assert.equal(status, 400, JSON.stringify(bad));
+    assert.equal(json.error, 'bad-proxy');
+  }
+});
+
+await test('vpn apply refuses to connect without a selected server', async () => {
+  const { status, json } = await call('POST', '/api/vpn/apply', { confirm: true, enabled: true, serverId: 's1', servers: [] });
+  assert.equal(status, 400);
+  assert.equal(json.error, 'unknown-server');
+});
+
+await test('vpn apply stores only validated fields', async () => {
+  const applied = await call('POST', '/api/vpn/apply', {
+    confirm: true, enabled: true, serverId: 's1', failClosed: true, servers: [proxy],
+    masterPassword: 'must not be stored', theme: 'dark',
+  });
+  assert.equal(applied.status, 200);
+  assert.equal(applied.json.ok, true);
+
+  const state = await call('GET', '/api/vpn/state');
+  assert.equal(state.json.active, true);
+  assert.equal(state.json.blocked, false);
+  assert.deepEqual(state.json.server, proxy);
+
+  const onDisk = JSON.parse(fs.readFileSync(path.join(usbRoot, 'Data/Settings/vpn.json'), 'utf8'));
+  assert.deepEqual(Object.keys(onDisk).sort(), ['autoConnect', 'baselineIp', 'enabled', 'failClosed', 'serverId', 'servers', 'verifyUrl', 'version']);
+  assert.ok(!fs.existsSync(path.join(usbRoot, 'Data/Settings/vpn.json.tmp')), 'temporary file left behind');
+});
+
+await test('disconnecting also clears auto-connect', async () => {
+  const servers = [proxy];
+  assert.equal((await call('POST', '/api/vpn/apply', { confirm: true, enabled: true, autoConnect: true, serverId: 's1', servers })).status, 200);
+  assert.equal((await call('GET', '/api/vpn/state')).json.active, true);
+
+  assert.equal((await call('POST', '/api/vpn/apply', { confirm: true, enabled: false, autoConnect: true, serverId: 's1', servers })).status, 200);
+  assert.equal((await call('GET', '/api/vpn/state')).json.active, true, 'auto-connect alone still requests protection');
+
+  assert.equal((await call('POST', '/api/vpn/apply', { confirm: true, enabled: false, autoConnect: false, serverId: 's1', servers })).status, 200);
+  const state = await call('GET', '/api/vpn/state');
+  assert.equal(state.json.active, false);
+  assert.equal(state.json.enabled, false);
+});
+
+await test('an unsafe verification address falls back to the default', async () => {
+  for (const url of ['http://api.ipify.org?format=json', 'https://user:pass@api.ipify.org/', 'https://127.0.0.1/ip', 'not a url']) {
+    assert.equal((await call('POST', '/api/vpn/apply', { confirm: true, verifyUrl: url, servers: [] })).status, 200);
+    const { json } = await call('GET', '/api/vpn/state');
+    assert.equal(json.verifyUrl, 'https://api.ipify.org?format=json', url);
+  }
+});
+
+await test('fail closed blocks browsing when no usable server is selected', async () => {
+  assert.equal((await doc('vpn', { version: 1, enabled: true, serverId: null, failClosed: true, servers: [] })).status, 200);
+  const blocked = await call('GET', '/api/vpn/state');
+  assert.equal(blocked.json.blocked, true);
+  assert.equal(blocked.json.active, true);
+
+  assert.equal((await doc('vpn', { version: 1, enabled: true, serverId: null, failClosed: false, servers: [] })).status, 200);
+  assert.equal((await call('GET', '/api/vpn/state')).json.blocked, false);
+  assert.equal((await doc('vpn', { version: 1, enabled: false, servers: [] })).status, 200);
 });
 
 await test('USB removal pauses writes without creating host folders', async () => {

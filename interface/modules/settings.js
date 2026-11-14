@@ -1,5 +1,5 @@
 import { api, bus } from './api.js';
-import { h, clear, toast, reportError, formatBytes } from './ui.js';
+import { h, clear, toast, reportError, formatBytes, cardLabel, switchRow } from './ui.js';
 import { icon } from './icons.js';
 
 export const SEARCH_ENGINES = {
@@ -10,20 +10,19 @@ export const SEARCH_ENGINES = {
 };
 
 const DEFAULTS = {
-  theme: 'dark',
   searchEngine: 'duckduckgo',
   vaultLockMinutes: 5,
   clipboardClearSeconds: 20,
+  warnLowSpace: true,
+  warnCriticalSpace: true,
 };
 
 let current = { ...DEFAULTS };
-const media = window.matchMedia('(prefers-color-scheme: light)');
 
 export async function loadSettings() {
   const stored = await api.readDocument('settings');
   current = { ...DEFAULTS, ...(stored ?? {}) };
   if (!SEARCH_ENGINES[current.searchEngine]) current.searchEngine = DEFAULTS.searchEngine;
-  applyTheme();
   return current;
 }
 
@@ -32,20 +31,11 @@ export function getSettings() {
 }
 
 export async function updateSettings(patch) {
-  current = { ...current, ...patch };
-  applyTheme();
-  await api.writeDocument('settings', { version: 1, ...current });
+  const next = { ...current, ...patch };
+  await api.writeDocument('settings', { version: 1, ...next });
+  current = next;
   bus.dispatchEvent(new Event('settings-changed'));
 }
-
-export function applyTheme() {
-  const theme = current.theme === 'system' ? (media.matches ? 'light' : 'dark') : current.theme;
-  document.documentElement.dataset.theme = theme;
-}
-
-media.addEventListener('change', () => {
-  if (current.theme === 'system') applyTheme();
-});
 
 export function searchUrl(query) {
   const engine = SEARCH_ENGINES[current.searchEngine] ?? SEARCH_ENGINES.duckduckgo;
@@ -86,14 +76,8 @@ export async function mount(target) {
   const settings = getSettings();
   clear(target);
 
-  const theme = selectField('set-theme', 'Theme', [
-    { value: 'dark', label: 'Dark blue' },
-    { value: 'light', label: 'Light' },
-    { value: 'system', label: 'Match Windows' },
-  ], settings.theme);
-
   const engine = selectField('set-engine', 'Search engine',
-    Object.entries(SEARCH_ENGINES).map(([value, engine]) => ({ value, label: engine.label })),
+    Object.entries(SEARCH_ENGINES).map(([value, entry]) => ({ value, label: entry.label })),
     settings.searchEngine, 'Used when the search box contains words instead of an address.');
 
   const lock = selectField('set-lock', 'Lock vault after inactivity',
@@ -104,11 +88,10 @@ export async function mount(target) {
     [10, 20, 30, 60].map((value) => ({ value, label: `${value} seconds` })),
     settings.clipboardClearSeconds, 'Surge clears the clipboard only while this workspace tab stays open.');
 
-  const save = h('button', { class: 'btn btn-primary', type: 'button' }, icon('check'), 'Save preferences');
+  const save = h('button', { class: 'btn btn-primary', type: 'button' }, icon('save'), 'Save preferences');
   save.addEventListener('click', async () => {
     try {
       await updateSettings({
-        theme: theme.querySelector('select').value,
         searchEngine: engine.querySelector('select').value,
         vaultLockMinutes: Number(lock.querySelector('select').value),
         clipboardClearSeconds: Number(clipboard.querySelector('select').value),
@@ -119,20 +102,48 @@ export async function mount(target) {
     }
   });
 
+  const persist = (patch) => updateSettings(patch).catch(reportError);
+
   const storage = status?.storage;
   target.append(
     h('header', { class: 'section-head' },
-      h('div', {}, h('h1', { text: 'Settings' }), h('p', { class: 'section-sub', text: 'Workspace preferences travel with the USB drive.' }))),
-    h('div', { class: 'card' },
-      h('h2', { class: 'card-title', text: 'Workspace' }),
-      h('div', { class: 'form-grid' }, theme, engine, lock, clipboard),
-      h('div', { class: 'dialog-actions' }, save)),
-    h('div', { class: 'card' },
-      h('h2', { class: 'card-title', text: 'This USB drive' }),
+      h('div', {}, h('h1', { text: 'Settings' }), h('p', { class: 'section-sub', text: 'Workspace preferences' }))),
+    h('div', { class: 'settings-grid' },
+      h('div', { class: 'settings-col' },
+        h('section', { class: 'card' },
+          cardLabel('Workspace'),
+          engine, lock, clipboard,
+          h('div', { class: 'dialog-actions' }, save)),
+        h('section', { class: 'card' },
+          cardLabel('Storage'),
+          switchRow({
+            label: 'Warn below 1 GB free',
+            checked: Boolean(settings.warnLowSpace),
+            onChange: (value) => persist({ warnLowSpace: value }),
+          }),
+          switchRow({
+            label: 'Strong warning below 500 MB',
+            checked: Boolean(settings.warnCriticalSpace),
+            onChange: (value) => persist({ warnCriticalSpace: value }),
+          }),
+          infoRow('Downloads folder', 'SURGE/Downloads'))),
+      h('div', { class: 'settings-col' },
+        h('section', { class: 'card' },
+          cardLabel('Browser'),
+          infoRow('Browser', 'Surge Browser'),
+          infoRow('Rendering engine', 'Chromium'),
+          infoRow('Password storage', 'Surge encrypted vault only'),
+          h('p', { class: 'hint', text: 'Websites open in a separate Surge Browser window. They cannot access workspace tools or your vault.' })),
+
+        h('section', { class: 'card' },
+          cardLabel('About'),
+          h('p', { text: 'Surge Portable 1.0' }),
+          h('p', { class: 'muted', text: '16GB edition · Windows 10 / 11 · No installation' })))),
+    h('section', { class: 'card' },
+      cardLabel('This USB drive'),
       infoRow('Surge version', status?.version ?? '1.0.0'),
       infoRow('Surge folder', status?.usbRoot ?? 'Unavailable'),
-      infoRow('Browser profile', 'Data/Profile (on this USB)'),
-      infoRow('Downloads', 'Downloads (on this USB)'),
+      infoRow('Browser profile', 'Data/BrowserProfile (on this USB)'),
       infoRow('Notes', 'Data/Notes/notes.json'),
       infoRow('Bookmarks', 'Data/Bookmarks/bookmarks.json'),
       infoRow('Password vault', 'Data/PasswordVault/vault.enc (encrypted)'),
@@ -140,6 +151,6 @@ export async function mount(target) {
     h('div', { class: 'banner banner-info' }, icon('warning'),
       h('div', {},
         h('strong', { text: 'Before you unplug' }),
-        h('p', { text: 'Close Firefox, wait for Surge to finish saving, then use "Safely Remove Hardware" in Windows. Pulling the USB out while Surge is writing can damage notes, bookmarks or the vault.' }))),
+        h('p', { text: 'Close Surge Browser and Surge, wait for saving to finish, then use "Safely Remove Hardware" in Windows. Pulling the USB out while Surge is writing can damage notes, bookmarks or the vault.' }))),
     h('p', { class: 'hint', text: 'Surge keeps your data on this USB drive, but Windows, antivirus software and websites may still leave their own traces on the computer you use. Surge is not a zero-trace or anonymity tool.' }));
 }

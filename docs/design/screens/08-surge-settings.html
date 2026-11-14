@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Surge Settings</title>
+
+</head>
+<body>
+<x-dc>
+<helmet>
+<!-- fonts stripped -->
+<style>
+body{margin:0;font-family:'Segoe UI',system-ui,Arial,sans-serif}
+code,pre,.mono{font-family:Consolas,'Cascadia Mono','Courier New',monospace}
+a{color:inherit;text-decoration:none}
+a:hover,button:hover{filter:brightness(.94)}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid #1546E6;outline-offset:2px}
+button{font-family:inherit;cursor:pointer}
+input,textarea{font-family:inherit}
+.nav{display:flex;align-items:center;min-height:44px;padding:0 14px;border-radius:10px;font-size:14px;color:#0B1B3A;border:1px solid transparent}
+.on{color:#1546E6;border-color:#D0DAEE;background:#1546E615;font-weight:700}
+.card{background:#F4F7FC;border:1px solid #D0DAEE;border-radius:12px;padding:20px;box-sizing:border-box}
+.lbl{font-size:12px;letter-spacing:.14em;color:#4A5B7A;margin:0 0 14px}
+.btn{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid #D0DAEE;background:transparent;color:#0B1B3A;font-size:13px;display:inline-flex;align-items:center}
+.pri{background:#1546E6;color:#fff;border:0;font-weight:800;box-shadow:0 4px 22px #1546E633}
+.muted{color:#4A5B7A}
+.row{display:flex;align-items:center;gap:14px;min-height:52px;padding:0 6px;border-top:1px solid #E1E8F5;font-size:14px}
+.inp{min-height:48px;border-radius:10px;border:1px solid #D0DAEE;background:#fff;color:#0B1B3A;padding:0 16px;font-size:14px;box-sizing:border-box}
+</style>
+</helmet>
+<div style="width:1280px;height:780px;box-sizing:border-box;background:#fff;color:#0B1B3A;display:flex">
+<div style="width:232px;flex:none;border-right:1px solid #E1E8F5;padding:28px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:6px">
+<div style="font-size:20px;font-weight:800;letter-spacing:.18em;color:#E3162B;padding:0 14px 22px">SURGE</div>
+<a class="nav" href="Home.dc.html">Home</a>
+<a class="nav" href="Files.dc.html">Files</a>
+<a class="nav" href="Notes.dc.html">Notes</a>
+<a class="nav" href="Bookmarks.dc.html">Bookmarks</a>
+<a class="nav" href="Downloads.dc.html">Downloads</a>
+<a class="nav" href="Passwords.dc.html">Passwords</a>
+<a class="nav" href="Main.dc.html">VPN</a>
+<a class="nav on" href="Settings.dc.html">Settings</a>
+<div style="margin-top:auto;padding:0 14px">
+<div class="muted" style="font-size:11px;letter-spacing:.1em;margin-bottom:8px">USB STORAGE</div>
+<div style="height:6px;border-radius:9px;background:#E1E8F5"><div style="width:52%;height:6px;border-radius:9px;background:#1546E6;box-shadow:0 4px 10px #1546E633"></div></div>
+<div class="muted" style="font-size:12px;margin-top:8px">7.0 GB free of 14.5 GB</div>
+</div>
+</div>
+<div style="flex:1;min-width:0;padding:32px 44px;box-sizing:border-box;display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;justify-content:space-between;align-items:center"><div><h1 style="margin:0;font-size:30px;font-weight:800;">Settings</h1><div class="muted" style="font-size:13px;margin-top:6px">Workspace preferences</div></div><div style="display:flex;gap:10px"></div></div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;flex:1;min-height:0">
+<div style="display:flex;flex-direction:column;gap:16px"><div class="card"><p class="lbl">APPEARANCE</p><div style="display:flex;gap:10px"><span class="btn" style="border-color:#1546E6;background:#1546E622;color:#1546E6">Neon green</span><span class="btn" style="">Cyan</span><span class="btn" style="">Lime</span></div></div>
+<div class="card"><p class="lbl">STORAGE</p><div class="row"><span style="flex:1">Warn below 1 GB free</span><span style="width:46px;height:26px;border-radius:99px;background:#1546E6;display:flex;align-items:center;padding:0 4px;box-sizing:border-box;justify-content:flex-end"><span style="width:18px;height:18px;border-radius:50%;background:#fff"></span></span></div><div class="row"><span style="flex:1">Strong warning below 500 MB</span><span style="width:46px;height:26px;border-radius:99px;background:#1546E6;display:flex;align-items:center;padding:0 4px;box-sizing:border-box;justify-content:flex-end"><span style="width:18px;height:18px;border-radius:50%;background:#fff"></span></span></div><div class="row"><span style="flex:1">Downloads folder</span><span class="muted">SURGE/Downloads</span></div></div></div>
+<div style="display:flex;flex-direction:column;gap:16px"><div class="card"><p class="lbl">BROWSER</p><div class="row"><span style="flex:1">Firefox saved passwords off</span><span style="width:46px;height:26px;border-radius:99px;background:#1546E6;display:flex;align-items:center;padding:0 4px;box-sizing:border-box;justify-content:flex-end"><span style="width:18px;height:18px;border-radius:50%;background:#fff"></span></span></div><div class="row"><span style="flex:1">Open Surge as homepage</span><span style="width:46px;height:26px;border-radius:99px;background:#1546E6;display:flex;align-items:center;padding:0 4px;box-sizing:border-box;justify-content:flex-end"><span style="width:18px;height:18px;border-radius:50%;background:#fff"></span></span></div><div class="row"><span style="flex:1">Private browsing allowed</span><span style="width:46px;height:26px;border-radius:99px;background:#1546E6;display:flex;align-items:center;padding:0 4px;box-sizing:border-box;justify-content:flex-end"><span style="width:18px;height:18px;border-radius:50%;background:#fff"></span></span></div></div>
+<div class="card"><p class="lbl">ABOUT</p><div style="font-size:14px;line-height:1.8">Surge Portable 1.0<br><span class="muted">16GB edition · Windows 10 / 11 · No installation</span></div></div></div></div>
+</div>
+</div>
+</x-dc>
+
+
+
+</body></html>

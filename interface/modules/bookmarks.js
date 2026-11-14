@@ -3,21 +3,75 @@ import { h, clear, newId, toast, reportError, confirmDialog, promptDialog, formD
 import { icon } from './icons.js';
 
 export const ROOT_FOLDER = 'root';
+export const PINNED_FOLDER = 'pinned';
 
 let data = { version: 1, folders: [], items: [] };
+let readError = new Error('Bookmarks have not been loaded. Writes are blocked.');
+let operations = Promise.resolve();
 
-export async function loadBookmarks() {
-  const stored = await api.readDocument('bookmarks');
-  data = {
-    version: 1,
-    folders: Array.isArray(stored?.folders) ? stored.folders : [],
-    items: Array.isArray(stored?.items) ? stored.items : [],
-  };
-  return data;
+function serialize(operation) {
+  const result = operations.then(operation);
+  // Keep the queue usable after a failure without hiding it from the caller.
+  operations = result.catch(() => {});
+  return result;
 }
 
-async function persist() {
-  await api.writeDocument('bookmarks', data);
+function validateDocument(stored) {
+  if (stored === null) return { version: 1, folders: [], items: [] };
+  const invalid = () => new Error('The bookmarks document is damaged or unsupported. Writes are blocked to protect it.');
+  if (!stored || (stored.version !== undefined && stored.version !== 1)
+    || !Array.isArray(stored.folders) || !Array.isArray(stored.items)) throw invalid();
+
+  const folderIds = new Set([ROOT_FOLDER, PINNED_FOLDER]);
+  const folders = stored.folders.map((folder) => {
+    if (!folder || typeof folder.id !== 'string' || !folder.id || folderIds.has(folder.id)
+      || typeof folder.name !== 'string') throw invalid();
+    folderIds.add(folder.id);
+    return { ...folder };
+  });
+  const itemIds = new Set();
+  const items = stored.items.map((item) => {
+    const url = safeUrl(item?.url);
+    if (!item || typeof item.id !== 'string' || !item.id || itemIds.has(item.id)
+      || typeof item.title !== 'string' || !url
+      || (item.folderId !== undefined && typeof item.folderId !== 'string')
+      || (item.pinned !== undefined && typeof item.pinned !== 'boolean')
+      || (item.createdAt !== undefined && (typeof item.createdAt !== 'string' || !Number.isFinite(Date.parse(item.createdAt))))) throw invalid();
+    itemIds.add(item.id);
+    return {
+      ...item, url,
+      folderId: item.folderId !== PINNED_FOLDER && folderIds.has(item.folderId) ? item.folderId : ROOT_FOLDER,
+      pinned: item.pinned ?? false,
+    };
+  });
+  return { version: 1, folders, items };
+}
+
+export async function loadBookmarks() {
+  // Reads share the mutation queue, so a reload cannot replace an in-flight save.
+  return serialize(async () => {
+    try {
+      const next = validateDocument(await api.readDocument('bookmarks'));
+      data = next;
+      readError = null;
+      return structuredClone(data);
+    } catch (error) {
+      readError = error;
+      throw error;
+    }
+  });
+}
+
+function mutate(operation) {
+  return serialize(() => {
+    if (readError) throw readError;
+    return operation(structuredClone(data));
+  });
+}
+
+async function persist(next) {
+  await api.writeDocument('bookmarks', next);
+  data = next;
   bus.dispatchEvent(new Event('bookmarks-changed'));
 }
 
@@ -27,13 +81,14 @@ export function listFolders() {
 
 export function folderName(id) {
   if (id === ROOT_FOLDER) return 'All bookmarks';
+  if (id === PINNED_FOLDER) return 'Pinned';
   return data.folders.find((folder) => folder.id === id)?.name ?? 'All bookmarks';
 }
 
 export function listItems(folderId = ROOT_FOLDER, query = '') {
   const needle = query.trim().toLowerCase();
   return data.items
-    .filter((item) => folderId === ROOT_FOLDER || item.folderId === folderId)
+    .filter((item) => folderId === ROOT_FOLDER || (folderId === PINNED_FOLDER ? item.pinned : item.folderId === folderId))
     .filter((item) => !needle || item.title.toLowerCase().includes(needle) || item.url.toLowerCase().includes(needle))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -47,52 +102,60 @@ export function countItems() {
 }
 
 export async function addItem({ title, url, folderId = ROOT_FOLDER }) {
-  const item = {
-    id: newId(),
-    title: title || url,
-    url,
-    folderId: folderId === ROOT_FOLDER ? ROOT_FOLDER : folderId,
-    pinned: false,
-    createdAt: new Date().toISOString(),
-  };
-  data.items.push(item);
-  await persist();
-  return item;
+  return mutate(async (next) => {
+    const address = safeUrl(url);
+    if (!address) throw new Error('Only HTTP and HTTPS bookmarks are supported.');
+    const existing = next.items.find((item) => item.url === address);
+    if (existing) return existing;
+    const item = { id: newId(), title: title || address, url: address, folderId, pinned: false, createdAt: new Date().toISOString() };
+    next.items.push(item);
+    await persist(next);
+    render();
+    return item;
+  });
 }
 
 export async function updateItem(id, patch) {
-  const item = data.items.find((entry) => entry.id === id);
-  if (!item) return null;
-  Object.assign(item, patch);
-  await persist();
-  return item;
+  return mutate(async (next) => {
+    const item = next.items.find((entry) => entry.id === id);
+    if (!item) return null;
+    Object.assign(item, patch);
+    await persist(next);
+    return item;
+  });
 }
 
 export async function deleteItem(id) {
-  data.items = data.items.filter((item) => item.id !== id);
-  await persist();
+  return mutate(async (next) => {
+    next.items = next.items.filter((item) => item.id !== id);
+    await persist(next);
+  });
 }
 
 export async function addFolder(name) {
-  const folder = { id: newId(), name };
-  data.folders.push(folder);
-  await persist();
-  return folder;
+  return mutate(async (next) => {
+    const folder = { id: newId(), name };
+    next.folders.push(folder);
+    await persist(next);
+    return folder;
+  });
 }
 
 export async function renameFolder(id, name) {
-  const folder = data.folders.find((entry) => entry.id === id);
-  if (!folder) return;
-  folder.name = name;
-  await persist();
+  return mutate(async (next) => {
+    const folder = next.folders.find((entry) => entry.id === id);
+    if (!folder) return;
+    folder.name = name;
+    await persist(next);
+  });
 }
 
 export async function deleteFolder(id) {
-  data.folders = data.folders.filter((folder) => folder.id !== id);
-  data.items.forEach((item) => {
-    if (item.folderId === id) item.folderId = ROOT_FOLDER;
+  return mutate(async (next) => {
+    next.folders = next.folders.filter((folder) => folder.id !== id);
+    next.items.forEach((item) => { if (item.folderId === id) item.folderId = ROOT_FOLDER; });
+    await persist(next);
   });
-  await persist();
 }
 
 export function exportJson() {
@@ -102,29 +165,26 @@ export function exportJson() {
 export async function importJson(text) {
   const parsed = JSON.parse(text);
   if (!Array.isArray(parsed?.items)) throw new Error('That file does not contain Surge bookmarks.');
-  const folders = Array.isArray(parsed.folders) ? parsed.folders : [];
-  const folderIds = new Set(folders.map((folder) => folder.id));
-  let added = 0;
-
-  for (const folder of folders) {
-    if (!data.folders.some((existing) => existing.id === folder.id)) data.folders.push({ id: folder.id, name: String(folder.name ?? 'Folder') });
-  }
-  for (const item of parsed.items) {
-    const url = safeUrl(item.url);
-    if (!url) continue;
-    if (data.items.some((existing) => existing.url === url)) continue;
-    data.items.push({
-      id: newId(),
-      title: String(item.title ?? url),
-      url,
-      folderId: folderIds.has(item.folderId) ? item.folderId : ROOT_FOLDER,
-      pinned: Boolean(item.pinned),
-      createdAt: item.createdAt ?? new Date().toISOString(),
-    });
-    added += 1;
-  }
-  await persist();
-  return added;
+  return mutate(async (next) => {
+    const folders = Array.isArray(parsed.folders) ? parsed.folders : [];
+    const folderIds = new Set([ROOT_FOLDER, ...next.folders.map((folder) => folder.id)]);
+    let added = 0;
+    for (const folder of folders) {
+      if (typeof folder?.id !== 'string' || !folder.id || folder.id === PINNED_FOLDER || folderIds.has(folder.id)) continue;
+      next.folders.push({ id: folder.id, name: String(folder.name ?? 'Folder') });
+      folderIds.add(folder.id);
+    }
+    for (const item of parsed.items) {
+      const url = safeUrl(item?.url);
+      if (!url || next.items.some((existing) => existing.url === url)) continue;
+      next.items.push({ id: newId(), title: String(item.title ?? url), url,
+        folderId: folderIds.has(item.folderId) ? item.folderId : ROOT_FOLDER,
+        pinned: Boolean(item.pinned), createdAt: new Date().toISOString() });
+      added += 1;
+    }
+    await persist(next);
+    return added;
+  });
 }
 
 /// Netscape bookmark format: the same HTML file Firefox exports and imports.
@@ -166,6 +226,7 @@ export function exportHtml() {
 
 export async function importHtml(text) {
   const doc = new DOMParser().parseFromString(text, 'text/html');
+  return mutate(async (data) => {
   let added = 0;
 
   const walk = (list, folderId) => {
@@ -327,34 +388,66 @@ function importPicker() {
   return input;
 }
 
-function renderRows() {
-  const body = container?.querySelector('#bookmark-rows');
+function renderCards() {
+  const grid = container?.querySelector('#bookmark-grid');
   const summary = container?.querySelector('#bookmark-summary');
-  if (!body) return;
-  clear(body);
+  if (!grid) return;
+  clear(grid);
 
   const items = listItems(activeFolder, query);
   for (const item of items) {
-    body.append(h('tr', { class: 'row' },
-      h('td', { class: 'cell-name' }, icon('bookmarks', 16),
-        h('a', { href: item.url, target: '_blank', rel: 'noopener noreferrer', text: item.title })),
-      h('td', { class: 'cell-url', text: item.url }),
-      h('td', { class: 'cell-type', text: folderName(item.folderId) }),
-      h('td', { class: 'cell-actions' },
+    grid.append(h('article', { class: 'bookmark-card' },
+      h('a', { class: 'bookmark-title', href: item.url, target: '_blank', rel: 'noopener noreferrer', text: item.title }),
+      h('span', { class: 'bookmark-url', text: item.url }),
+      h('span', { class: 'bookmark-folder', text: folderName(item.folderId) }),
+      h('div', { class: 'cell-actions' },
         h('button', {
           class: item.pinned ? 'btn btn-small btn-primary' : 'btn btn-small', type: 'button',
           'aria-pressed': item.pinned ? 'true' : 'false',
-          title: item.pinned ? 'Remove from homepage shortcuts' : 'Show on homepage',
-          onClick: async () => { await updateItem(item.id, { pinned: !item.pinned }); renderRows(); },
+          onClick: async () => { await updateItem(item.id, { pinned: !item.pinned }); renderCards(); },
         }, icon('star', 15), item.pinned ? 'Pinned' : 'Pin'),
-        h('button', { class: 'btn btn-small', type: 'button', onClick: () => addOrEdit(item) }, icon('pencil', 15), 'Edit'),
-        h('button', { class: 'btn btn-small btn-danger', type: 'button', onClick: () => removeItem(item) }, icon('trash', 15), 'Delete'))));
+        h('button', { class: 'btn btn-small btn-icon', type: 'button', 'aria-label': `Edit ${item.title}`, onClick: () => addOrEdit(item) }, icon('pencil', 15)),
+        h('button', { class: 'btn btn-small btn-icon btn-danger', type: 'button', 'aria-label': `Delete ${item.title}`, onClick: () => removeItem(item) }, icon('trash', 15)))));
   }
 
   if (!items.length) {
-    body.append(h('tr', {}, h('td', { colspan: '4' }, emptyState(query ? 'No bookmarks match that search.' : 'No bookmarks yet. Add one, or import your Firefox bookmarks.'))));
+    grid.append(emptyState(query ? 'No bookmarks match that search.' : 'No bookmarks here yet. Add one, or import your Firefox bookmarks.'));
   }
   if (summary) summary.textContent = `${items.length} bookmark${items.length === 1 ? '' : 's'} • ${countItems()} total`;
+}
+
+function folderRail() {
+  const rail = h('nav', { class: 'folder-rail', 'aria-label': 'Bookmark folders' });
+  const entry = (id, label) => h('button', {
+    class: `nav-item${activeFolder === id ? ' active' : ''}`, type: 'button',
+    'aria-current': activeFolder === id ? 'page' : null,
+    onClick: () => { activeFolder = id; render(); },
+  }, icon(id === PINNED_FOLDER ? 'star' : 'files', 16), h('span', { text: label }));
+
+  rail.append(entry(ROOT_FOLDER, 'All'), entry(PINNED_FOLDER, 'Pinned'));
+  for (const folder of listFolders()) rail.append(entry(folder.id, folder.name));
+
+  rail.append(h('button', {
+    class: 'btn', type: 'button',
+    onClick: async () => {
+      const name = await promptDialog({ title: 'New folder', label: 'Folder name', confirmLabel: 'Create' });
+      if (!name) return;
+      try {
+        const folder = await addFolder(name);
+        activeFolder = folder.id;
+        render();
+      } catch (error) {
+        reportError(error);
+      }
+    },
+  }, icon('plus', 16), 'Folder'));
+
+  if (activeFolder !== ROOT_FOLDER && activeFolder !== PINNED_FOLDER) {
+    rail.append(
+      h('button', { class: 'btn btn-small', type: 'button', onClick: () => manageFolder('rename') }, icon('pencil', 15), 'Rename'),
+      h('button', { class: 'btn btn-small btn-danger', type: 'button', onClick: () => manageFolder('delete') }, icon('trash', 15), 'Delete folder'));
+  }
+  return rail;
 }
 
 function render() {
@@ -364,54 +457,25 @@ function render() {
   container.append(
     h('header', { class: 'section-head' },
       h('div', {}, h('h1', { text: 'Bookmarks' }),
-        h('p', { class: 'section-sub', text: 'Your Surge shortcut panel. Firefox keeps its own bookmarks as the browser’s source of truth.' })),
-      h('div', { class: 'toolbar-actions' },
-        h('button', { class: 'btn btn-primary', type: 'button', onClick: () => addOrEdit() }, icon('plus'), 'Add bookmark'),
-        h('button', {
-          class: 'btn', type: 'button',
-          onClick: async () => {
-            const name = await promptDialog({ title: 'New folder', label: 'Folder name', confirmLabel: 'Create' });
-            if (!name) return;
-            try {
-              const folder = await addFolder(name);
-              activeFolder = folder.id;
-              render();
-            } catch (error) {
-              reportError(error);
-            }
-          },
-        }, icon('files'), 'New folder'))),
-    h('div', { class: 'toolbar' },
-      h('input', {
-        class: 'input input-inline', type: 'search', placeholder: 'Search bookmarks', value: query, 'aria-label': 'Search bookmarks',
-        onInput: (event) => { query = event.target.value; renderRows(); },
-      }),
-      h('select', {
-        class: 'input input-inline', 'aria-label': 'Bookmark folder',
-        onChange: (event) => { activeFolder = event.target.value; render(); },
-      }, folderOptions().map((option) => h('option', { value: option.value, selected: option.value === activeFolder }, option.label))),
-      activeFolder !== ROOT_FOLDER
-        ? h('div', { class: 'toolbar-actions' },
-          h('button', { class: 'btn btn-small', type: 'button', onClick: () => manageFolder('rename') }, icon('pencil', 15), 'Rename folder'),
-          h('button', { class: 'btn btn-small btn-danger', type: 'button', onClick: () => manageFolder('delete') }, icon('trash', 15), 'Delete folder'))
-        : null,
-      h('div', { class: 'toolbar-actions' },
-        h('button', { class: 'btn btn-small', type: 'button', onClick: () => picker.click() }, icon('up'), 'Import'),
-        h('button', { class: 'btn btn-small', type: 'button', onClick: () => downloadFile('surge-bookmarks.json', exportJson(), 'application/json') }, icon('downloads'), 'Export JSON'),
-        h('button', { class: 'btn btn-small', type: 'button', onClick: () => downloadFile('surge-bookmarks.html', exportHtml(), 'text/html') }, icon('downloads'), 'Export for Firefox'))),
+        h('p', { class: 'section-sub', text: 'Opens in Firefox. Firefox keeps its own bookmarks as the browser’s source of truth.' })),
+      h('div', { class: 'section-actions' },
+        h('button', { class: 'btn', type: 'button', onClick: () => picker.click() }, icon('import', 16), 'Import'),
+        h('button', { class: 'btn', type: 'button', onClick: () => downloadFile('surge-bookmarks.json', exportJson(), 'application/json') }, icon('export', 16), 'Export'),
+        h('button', { class: 'btn', type: 'button', onClick: () => downloadFile('surge-bookmarks.html', exportHtml(), 'text/html') }, icon('open', 16), 'For Firefox'),
+        h('button', { class: 'btn btn-primary', type: 'button', onClick: () => addOrEdit() }, icon('plus', 16), 'Add bookmark'))),
     picker,
-    h('div', { class: 'table-wrap' },
-      h('table', { class: 'table' },
-        h('thead', {}, h('tr', {},
-          h('th', { scope: 'col', text: 'Name' }),
-          h('th', { scope: 'col', text: 'Address' }),
-          h('th', { scope: 'col', text: 'Folder' }),
-          h('th', { scope: 'col', text: 'Actions' }))),
-        h('tbody', { id: 'bookmark-rows' }))),
-    h('p', { class: 'table-summary', id: 'bookmark-summary' }),
+    h('div', { class: 'bookmarks-layout' },
+      folderRail(),
+      h('div', { class: 'stack' },
+        h('input', {
+          class: 'input', type: 'search', placeholder: 'Search bookmarks', value: query, 'aria-label': 'Search bookmarks',
+          onInput: (event) => { query = event.target.value; renderCards(); },
+        }),
+        h('div', { class: 'bookmark-grid', id: 'bookmark-grid' }),
+        h('p', { class: 'table-summary', id: 'bookmark-summary' }))),
     h('p', { class: 'hint', text: 'Export for Firefox writes a Netscape HTML file that Firefox can import (Bookmarks ▸ Manage Bookmarks ▸ Import and Backup). Import accepts that same HTML format or a Surge JSON export. Surge never edits Firefox’s live bookmark database.' }));
 
-  renderRows();
+  renderCards();
 }
 
 export async function mount(target) {

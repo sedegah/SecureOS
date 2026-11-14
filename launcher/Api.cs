@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace SurgePortable;
@@ -15,10 +16,17 @@ internal sealed record ApiResponse(int Status, string ContentType, byte[] Body, 
         new(status, "application/json; charset=utf-8", body, sourceHeader);
 }
 
+internal interface IBrowserControl
+{
+    bool BrowserRunning { get; }
+    void RequestRestart();
+}
+
 /// The workspace API. The browser never touches the filesystem directly; it asks this local helper.
-internal sealed class Api(PathManager paths, DocumentStore documents, FileOperations files)
+internal sealed class Api(PathManager paths, DocumentStore documents, FileOperations files, IBrowserControl browser)
 {
     public const string Version = "1.0.0";
+    private readonly VaultFileStore vaultFiles = new(paths);
 
     public ApiResponse Handle(string method, string path, string? query, byte[] body, Action heartbeat)
     {
@@ -58,10 +66,23 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
                     _ => ApiResponse.Error(405, "method", "Unsupported method."),
                 };
 
+            if (path.StartsWith("/api/vault/files/", StringComparison.Ordinal))
+            {
+                string id = path["/api/vault/files/".Length..];
+                if (!VaultFileStore.IsValidId(id))
+                    return ApiResponse.Error(400, "bad-id", "An attachment ID must be a canonical lowercase UUID.");
+                return VaultFile(method, id, body);
+            }
+
+            if (path == "/api/vpn/state" && method == "GET")
+                return VpnState();
+
+            if (path == "/api/vpn/apply" && method == "POST")
+                return VpnApply(body);
+
             if (path == "/api/files" && method == "GET")
             {
-                if (!paths.TryResolve(QueryValue(query, "path"), out string dir, out string error))
-                    return ApiResponse.Error(400, "bad-path", error);
+                string dir = ResolveOrdinaryPath(QueryValue(query, "path"), allowRoot: true);
                 return ApiResponse.Json(200, files.List(dir));
             }
 
@@ -77,6 +98,10 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
         catch (InvalidDataException ex)
         {
             return ApiResponse.Error(400, "bad-data", ex.Message);
+        }
+        catch (JsonException)
+        {
+            return ApiResponse.Error(400, "bad-data", "The request body must be valid JSON.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -153,6 +178,116 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
         });
     }
 
+    private ApiResponse VaultFile(string method, string id, byte[] body)
+    {
+        switch (method)
+        {
+            case "GET":
+            {
+                DocumentRead read = vaultFiles.Read(id);
+                return read.Status switch
+                {
+                    DocumentReadStatus.NotFound => ApiResponse.Error(404, "not-found", "That encrypted attachment does not exist."),
+                    DocumentReadStatus.Corrupt => ApiResponse.Error(500, "corrupt", "That encrypted attachment envelope is damaged or too large."),
+                    _ => ApiResponse.Raw(200, read.Data),
+                };
+            }
+            case "PUT":
+                vaultFiles.Create(id, body);
+                return Ok();
+            case "DELETE":
+            {
+                using JsonDocument request = JsonDocument.Parse(body);
+                JsonElement input = request.RootElement;
+                if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Count() != 1 ||
+                    !input.TryGetProperty("confirm", out JsonElement confirm) || confirm.ValueKind != JsonValueKind.True)
+                    return ApiResponse.Error(400, "confirm-required", "Deleting an encrypted attachment requires {\"confirm\":true}.");
+                vaultFiles.Delete(id);
+                return Ok();
+            }
+            default:
+                return ApiResponse.Error(405, "method", "Unsupported method.");
+        }
+    }
+
+    private ApiResponse VpnState()
+    {
+        BrowserPolicy policy = BrowserPolicy.Load(documents);
+        return ApiResponse.Json(200, new JsonObject
+        {
+            ["browserRunning"] = browser.BrowserRunning,
+            ["enabled"] = policy.ProtectionRequested,
+            ["active"] = policy.ProtectionActive,
+            ["blocked"] = policy.Blocked,
+            ["autoConnect"] = policy.AutoConnect,
+            ["failClosed"] = policy.FailClosed,
+            ["verifyUrl"] = policy.VerifyUrl,
+            ["serverId"] = policy.ServerId,
+            ["baselineIp"] = policy.BaselineIp,
+            ["server"] = policy.Server is null ? null : ServerJson(policy.Server),
+            ["servers"] = new JsonArray(policy.Servers.Select(ServerJson).ToArray()),
+        });
+    }
+
+    /// Firefox reads proxy preferences only at startup, so applying a change restarts the
+    /// browser. The caller must confirm, and the document is rebuilt from validated fields.
+    private ApiResponse VpnApply(byte[] body)
+    {
+        if (body.Length > PathManager.MaxDocumentBytes)
+            return ApiResponse.Error(413, "too-large", "That VPN configuration is larger than Surge allows.");
+
+        JsonObject input = ParseObject(body);
+        if (!RequireConfirm(input))
+            return ApiResponse.Error(400, "confirm-required", "Applying VPN settings restarts Firefox and needs an explicit confirmation.");
+
+        var servers = new JsonArray();
+        foreach (JsonNode? node in input["servers"] as JsonArray ?? [])
+        {
+            if (node is not JsonObject item)
+                continue;
+            ProxyServer? parsed = BrowserPolicy.ParseServer(item);
+            if (parsed is null)
+                return ApiResponse.Error(400, "bad-proxy",
+                    "Every server needs a valid host, a port between 1 and 65535, and a type of socks5 or https.");
+            if (servers.Count >= 20)
+                return ApiResponse.Error(400, "too-many-servers", "Surge stores at most 20 proxy servers.");
+            servers.Add((JsonNode)ServerJson(parsed));
+        }
+
+        string? serverId = input["serverId"]?.GetValue<string>();
+        bool enabled = Bool(input, "enabled", false);
+        if (enabled && !servers.OfType<JsonObject>().Any(s => s["id"]?.GetValue<string>() == serverId))
+            return ApiResponse.Error(400, "unknown-server", "Choose a valid proxy server before connecting.");
+
+        var payload = new JsonObject
+        {
+            ["version"] = 1,
+            ["enabled"] = enabled,
+            ["serverId"] = serverId,
+            ["autoConnect"] = Bool(input, "autoConnect", false),
+            ["failClosed"] = Bool(input, "failClosed", true),
+            ["verifyUrl"] = BrowserPolicy.NormalizeVerifyUrl(input["verifyUrl"]?.GetValue<string>()),
+            ["baselineIp"] = BrowserPolicy.NormalizeIp(input["baselineIp"]?.GetValue<string>()),
+            ["servers"] = servers,
+        };
+
+        documents.Write("vpn", Encoding.UTF8.GetBytes(payload.ToJsonString()));
+        browser.RequestRestart();
+        return ApiResponse.Json(200, new JsonObject { ["ok"] = true, ["restarting"] = browser.BrowserRunning });
+    }
+
+    private static JsonObject ServerJson(ProxyServer server) => new()
+    {
+        ["id"] = server.Id,
+        ["name"] = server.Name,
+        ["scheme"] = server.Scheme,
+        ["host"] = server.Host,
+        ["port"] = server.Port,
+    };
+
+    private static bool Bool(JsonObject input, string key, bool fallback) =>
+        input[key] is JsonValue value && value.TryGetValue<bool>(out bool result) ? result : fallback;
+
     private ApiResponse FileAction(string action, byte[] body)
     {
         JsonObject input = ParseObject(body);
@@ -162,24 +297,25 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
         {
             case "mkdir":
             {
-                if (!paths.TryResolve(requested, out string parent, out string error))
-                    return ApiResponse.Error(400, "bad-path", error);
-                files.MakeDirectory(parent, RequireString(input, "name"));
+                string parent = ResolveOrdinaryPath(requested, allowRoot: true);
+                string name = RequireString(input, "name");
+                ResolveOrdinaryPath(paths.ToRelative(Path.Combine(parent, name)));
+                files.MakeDirectory(parent, name);
                 return Ok();
             }
             case "rename":
             {
-                if (!paths.TryResolve(requested, out string source, out string error))
-                    return ApiResponse.Error(400, "bad-path", error);
-                files.Rename(source, RequireString(input, "name"));
+                string source = ResolveOrdinaryPath(requested);
+                string name = RequireString(input, "name");
+                ResolveOrdinaryPath(paths.ToRelative(Path.Combine(Path.GetDirectoryName(source)!, name)));
+                files.Rename(source, name);
                 return Ok();
             }
             case "delete":
             {
                 if (!RequireConfirm(input))
                     return ApiResponse.Error(400, "confirm-required", "Deleting requires an explicit confirmation.");
-                if (!paths.TryResolve(requested, out string target, out string error))
-                    return ApiResponse.Error(400, "bad-path", error);
+                string target = ResolveOrdinaryPath(requested);
                 files.Delete(target);
                 return Ok();
             }
@@ -197,15 +333,13 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
             }
             case "open":
             {
-                if (!paths.TryResolve(requested, out string target, out string error))
-                    return ApiResponse.Error(400, "bad-path", error);
+                string target = ResolveOrdinaryPath(requested);
                 files.Open(target);
                 return Ok();
             }
             case "reveal":
             {
-                if (!paths.TryResolve(requested, out string target, out string error))
-                    return ApiResponse.Error(400, "bad-path", error);
+                string target = ResolveOrdinaryPath(requested);
                 files.Reveal(target);
                 return Ok();
             }

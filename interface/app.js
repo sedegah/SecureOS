@@ -1,5 +1,5 @@
 import { initSession, api, bus } from './modules/api.js';
-import { h, clear, toast, reportError, formatBytes, relativeTime, emptyState } from './modules/ui.js';
+import { h, clear, toast, reportError, formatBytes, relativeTime, emptyState, cardLabel } from './modules/ui.js';
 import { icon } from './modules/icons.js';
 import * as settings from './modules/settings.js';
 import * as notes from './modules/notes.js';
@@ -7,6 +7,7 @@ import * as bookmarks from './modules/bookmarks.js';
 import * as files from './modules/files.js';
 import * as downloads from './modules/downloads.js';
 import * as passwords from './modules/passwords.js';
+import * as vpn from './modules/vpn.js';
 
 const ROUTES = [
   { id: 'home', label: 'Home', icon: 'home', mount: renderHome },
@@ -14,22 +15,23 @@ const ROUTES = [
   { id: 'notes', label: 'Notes', icon: 'notes', mount: notes.mount },
   { id: 'bookmarks', label: 'Bookmarks', icon: 'bookmarks', mount: bookmarks.mount },
   { id: 'downloads', label: 'Downloads', icon: 'downloads', mount: downloads.mount },
-  { id: 'passwords', label: 'Passwords', icon: 'passwords', mount: passwords.mount },
+  { id: 'passwords', label: 'Vault', icon: 'lock', mount: passwords.mount },
+  { id: 'vpn', label: 'Browser proxy', icon: 'vpn', mount: vpn.mount },
   { id: 'settings', label: 'Settings', icon: 'settings', mount: settings.mount },
 ];
 
 const TILES = [
+  { route: 'browser', icon: 'globe', title: 'Surge Browser', sub: 'Open the web browser' },
   { route: 'files', icon: 'files', title: 'My Files', sub: 'USB documents' },
   { route: 'notes', icon: 'notes', title: 'My Notes', sub: 'Personal notes' },
   { route: 'bookmarks', icon: 'bookmarks', title: 'Bookmarks', sub: 'Saved websites' },
   { route: 'downloads', icon: 'downloads', title: 'Downloads', sub: 'Downloaded files' },
-  { route: 'passwords', icon: 'passwords', title: 'Passwords', sub: 'Encrypted vault' },
-  { route: 'settings', icon: 'settings', title: 'Settings', sub: 'Workspace preferences' },
+  { route: 'passwords', icon: 'lock', title: 'Vault', sub: 'Passwords and private files' },
+  { route: 'vpn', icon: 'vpn', title: 'Browser proxy', sub: 'Bring your own server' },
 ];
 
 const main = document.getElementById('main');
 let currentRoute = 'home';
-let lastStatus = null;
 
 function buildNav() {
   const list = document.getElementById('nav-list');
@@ -64,17 +66,42 @@ function markActiveRoute() {
     if (active) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   }
+  document.getElementById('titlebar-section').textContent =
+    ROUTES.find((entry) => entry.id === currentRoute)?.label ?? '';
 }
 
 function navigate(route) {
+  if (route === 'browser') {
+    if (window.surgeDesktop) void window.surgeDesktop.openBrowser().catch(reportError);
+    else toast('Launch the standalone Surge desktop to open Surge Browser.', 'warn');
+    return;
+  }
   location.hash = `#/${route}`;
 }
 
-async function route() {
+let routing = Promise.resolve();
+
+function route() {
+  routing = routing.then(applyRoute).catch(reportError);
+  return routing;
+}
+
+async function applyRoute() {
   const requested = location.hash.replace(/^#\/?/, '').split('?')[0];
   const match = ROUTES.find((entry) => entry.id === requested) ?? ROUTES[0];
+  try {
+    await notes.flushPendingSave();
+  } catch (error) {
+    history.replaceState(null, '', `#/${currentRoute}`);
+    reportError(error);
+    return;
+  }
+  if (match.id !== 'notes') await notes.stop();
+  if (match.id !== 'passwords') passwords.stop();
+  if (match.id !== 'bookmarks') bookmarks.stop();
   currentRoute = match.id;
   markActiveRoute();
+  if (match.id !== 'vpn') vpn.stop();
   clear(main);
   main.setAttribute('aria-busy', 'true');
   try {
@@ -90,11 +117,13 @@ function updateStorage(status) {
   const storage = status?.storage;
   const block = document.getElementById('storage');
   const chip = document.getElementById('usb-chip');
+  document.getElementById('status-path').textContent = status?.usbRoot ?? '';
 
   if (!status?.usbPresent) {
     chip.className = 'chip chip-error';
     chip.textContent = 'USB disconnected';
     block.hidden = true;
+    showSpaceBanner(null);
     return;
   }
 
@@ -103,6 +132,7 @@ function updateStorage(status) {
 
   if (!storage) {
     block.hidden = true;
+    showSpaceBanner(null);
     return;
   }
 
@@ -113,6 +143,30 @@ function updateStorage(status) {
   fill.style.width = `${percent}%`;
   fill.className = storage.critical ? 'storage-fill critical' : storage.low ? 'storage-fill low' : 'storage-fill';
   block.title = `${formatBytes(storage.used)} used (${percent}%)`;
+  showSpaceBanner(storage);
+}
+
+function showSpaceBanner(storage) {
+  const banner = document.getElementById('space-banner');
+  const prefs = settings.getSettings();
+  const critical = storage?.critical && prefs.warnCriticalSpace;
+  const low = !critical && storage?.low && prefs.warnLowSpace;
+
+  if (!critical && !low) {
+    banner.hidden = true;
+    clear(banner);
+    return;
+  }
+
+  clear(banner).append(icon('warning'),
+    h('div', {},
+      h('strong', { text: critical ? 'USB drive almost full' : 'USB drive running low' }),
+      h('p', {
+        text: critical
+          ? `Only ${formatBytes(storage.free)} left. Saving may fail. Move files off the drive, or delete ones you no longer need.`
+          : `${formatBytes(storage.free)} left. Downloads and notes need room to save.`,
+      })));
+  banner.hidden = false;
 }
 
 function showUsbBanner(present) {
@@ -132,7 +186,6 @@ function showUsbBanner(present) {
 async function refreshStatus() {
   try {
     const [heartbeat, status] = await Promise.all([api.heartbeat(), api.status()]);
-    lastStatus = status;
     updateStorage(status);
     showUsbBanner(heartbeat.usbPresent && status.usbPresent);
   } catch (error) {
@@ -161,36 +214,19 @@ function searchPanel() {
       toast('Type a website address or some search words.', 'error');
       return;
     }
-    window.open(target, '_blank', 'noopener');
+    if (window.surgeDesktop) void window.surgeDesktop.openBrowser(target).catch(reportError);
+    else window.open(target, '_blank', 'noopener');
     input.value = '';
   });
   return form;
-}
-
-function shortcutStrip() {
-  const pinned = bookmarks.pinnedItems(8);
-  const card = h('section', { class: 'card' },
-    h('div', { class: 'card-head' },
-      h('h2', { class: 'card-title', text: 'Shortcuts' }),
-      h('button', { class: 'btn btn-small', type: 'button', onClick: () => navigate('bookmarks') }, icon('pencil', 15), 'Manage')));
-
-  if (!pinned.length) {
-    card.append(emptyState('Pin bookmarks to see them here. Open Bookmarks and choose Pin.'));
-    return card;
-  }
-
-  card.append(h('div', { class: 'shortcuts' }, pinned.map((item) => h('a', {
-    class: 'shortcut', href: item.url, target: '_blank', rel: 'noopener noreferrer',
-  }, icon('bookmarks', 16), h('span', { text: item.title })))));
-  return card;
 }
 
 function recentNotesCard() {
   const recent = notes.recentNotes(4);
   const card = h('section', { class: 'card' },
     h('div', { class: 'card-head' },
-      h('h2', { class: 'card-title', text: 'Recent notes' }),
-      h('button', { class: 'btn btn-small', type: 'button', onClick: () => navigate('notes') }, icon('notes', 15), 'All notes')));
+      cardLabel('Recent notes'),
+      h('button', { class: 'btn btn-small', type: 'button', onClick: () => navigate('notes') }, 'All notes')));
 
   if (!recent.length) {
     card.append(emptyState('No notes yet. Open My Notes to write your first one.'));
@@ -208,11 +244,11 @@ async function latestDownloadsCard() {
   const latest = await downloads.latestDownloads(4);
   const card = h('section', { class: 'card' },
     h('div', { class: 'card-head' },
-      h('h2', { class: 'card-title', text: 'Latest downloads' }),
-      h('button', { class: 'btn btn-small', type: 'button', onClick: () => navigate('downloads') }, icon('downloads', 15), 'All downloads')));
+      cardLabel('Latest downloads'),
+      h('button', { class: 'btn btn-small', type: 'button', onClick: () => navigate('downloads') }, 'All downloads')));
 
   if (!latest.length) {
-    card.append(emptyState('Nothing downloaded yet. Firefox saves files to SURGE/Downloads.'));
+    card.append(emptyState('Nothing downloaded yet. Surge Browser saves files to Downloads.'));
     return card;
   }
 
@@ -222,46 +258,31 @@ async function latestDownloadsCard() {
       onClick: () => api.open(`Downloads/${entry.name}`).catch(reportError),
     },
     h('span', { class: 'mini-title', text: entry.name }),
-    h('span', { class: 'mini-meta', text: `${formatBytes(entry.size)} • ${relativeTime(entry.modified)}` }))))));
+    h('span', { class: 'mini-meta', text: formatBytes(entry.size) }))))));
   return card;
 }
 
-function storageCard() {
-  const storage = lastStatus?.storage;
-  const card = h('section', { class: 'card' }, h('h2', { class: 'card-title', text: 'USB storage' }));
-  if (!storage) {
-    card.append(emptyState('Storage information is unavailable.'));
-    return card;
-  }
-  card.append(
-    h('p', { class: 'storage-big', text: `${formatBytes(storage.free)} free` }),
-    h('p', { class: 'muted', text: `${formatBytes(storage.used)} used of ${formatBytes(storage.total)}` }),
-    storage.critical
-      ? h('div', { class: 'banner banner-error', role: 'alert' }, icon('warning'), h('div', {}, h('strong', { text: 'Almost full' }), h('p', { text: 'Delete files before saving anything else.' })))
-      : storage.low
-        ? h('div', { class: 'banner banner-warn', role: 'status' }, icon('warning'), h('div', {}, h('strong', { text: 'Running low' }), h('p', { text: 'Less than 1GB remains on this drive.' })))
-        : h('p', { class: 'muted', text: 'Surge warns below 1GB and again below 500MB.' }));
-  return card;
+function refreshPill() {
+  const slot = document.getElementById('vpn-pill-slot');
+  if (slot) clear(slot).append(vpn.pill(() => navigate('vpn')));
 }
 
 async function renderHome(target) {
   clear(target);
   target.append(
     h('section', { class: 'hero' },
-      h('p', { class: 'eyebrow', text: 'YOUR PORTABLE WORKSPACE' }),
-      h('h1', { class: 'hero-title', text: 'Welcome to Surge.' }),
-      h('p', { class: 'hero-sub', text: 'Everything you need, wherever you go.' }),
+      h('div', { class: 'hero-top' },
+        h('div', {},
+          h('h1', { class: 'hero-title', text: 'Surge workspace' }),
+          h('p', { class: 'hero-sub', text: 'Everything you need, wherever you go.' })),
+        h('div', { class: 'section-actions' },
+          h('button', { id: 'open-surge-browser', class: 'btn btn-primary', type: 'button', onClick: () => navigate('browser') }, icon('globe'), 'Open Surge Browser'),
+          h('span', { id: 'vpn-pill-slot' }, vpn.pill(() => navigate('vpn'))))),
       searchPanel()),
     h('div', { class: 'tiles' }, TILES.map((tile) => h('button', {
       class: 'tile', type: 'button', onClick: () => navigate(tile.route),
     }, icon(tile.icon, 22), h('span', { class: 'tile-title', text: tile.title }), h('span', { class: 'tile-sub', text: tile.sub })))),
-    shortcutStrip(),
-    h('div', { class: 'grid-2' }, recentNotesCard(), await latestDownloadsCard()),
-    h('div', { class: 'grid-2' }, storageCard(),
-      h('section', { class: 'card' },
-        h('h2', { class: 'card-title', text: 'Travelling safely' }),
-        h('p', { text: 'Your browser profile, notes, bookmarks, downloads and vault all live on this USB drive.' }),
-        h('p', { class: 'muted', text: 'Close Firefox and safely eject the drive before unplugging it. Windows and the websites you visit may still leave traces on the host computer.' }))));
+    h('div', { class: 'grid-2' }, recentNotesCard(), await latestDownloadsCard()));
 
   target.querySelector('#surge-search')?.focus();
 }
@@ -292,18 +313,28 @@ async function boot() {
   });
   bus.addEventListener('helper-lost', () => {
     showUsbBanner(false);
-    toast('The Surge helper stopped. Close Firefox and start Surge.exe again.', 'error');
+    toast('The Surge helper stopped. Close Surge and start Surge.exe again.', 'error');
   });
   bus.addEventListener('restored-from-backup', () => toast('A damaged workspace file was recovered from its backup copy.', 'warn'));
   bus.addEventListener('notes-changed', () => { if (currentRoute === 'home') void renderHome(main); });
   bus.addEventListener('bookmarks-changed', () => { if (currentRoute === 'home') void renderHome(main); });
+  bus.addEventListener('vpn-changed', refreshPill);
+  bus.addEventListener('settings-changed', () => { void refreshStatus(); });
 
+  window.surgeDesktop?.onBookmark((bookmark) => {
+    void bookmarks.addItem(bookmark).then(() => toast('Bookmark saved.')).catch(reportError);
+  });
+  window.surgeDesktop?.onNavigate((destination) => {
+    if (ROUTES.some((entry) => entry.id === destination)) navigate(destination);
+  });
   window.addEventListener('hashchange', () => { void route(); });
-  window.addEventListener('beforeunload', () => { void notes.flushPendingSave(); });
+  window.addEventListener('beforeunload', () => { passwords.lock(); void notes.flushPendingSave().catch(() => {}); });
 
   await refreshStatus();
   setInterval(() => { void refreshStatus(); }, 20000);
   await route();
+  await vpn.start();
+  refreshPill();
 }
 
 void boot();

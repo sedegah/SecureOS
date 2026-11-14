@@ -38,7 +38,7 @@ async function request(method, path, body) {
     });
   } catch {
     bus.dispatchEvent(new CustomEvent('helper-lost'));
-    throw new ApiError(0, 'helper-unavailable', 'The Surge helper is no longer running. Close Firefox and start Surge.exe again.');
+    throw new ApiError(0, 'helper-unavailable', 'The Surge helper is no longer running. Close Surge and start Surge.exe again.');
   }
 
   if (response.status === 503) {
@@ -82,6 +82,12 @@ export const api = {
     }
   },
   writeVault: (envelope) => request('PUT', '/api/vault', envelope),
+  readVaultFile: (id) => request('GET', `/api/vault/files/${encodeURIComponent(id)}`),
+  writeVaultFile: (id, sealed) => request('PUT', `/api/vault/files/${encodeURIComponent(id)}`, sealed),
+  removeVaultFile: (id) => request('DELETE', `/api/vault/files/${encodeURIComponent(id)}`, { confirm: true }),
+
+  vpnState: () => window.surgeDesktop ? window.surgeDesktop.vpnState() : request('GET', '/api/vpn/state'),
+  vpnApply: (config) => window.surgeDesktop ? window.surgeDesktop.vpnApply(config) : request('POST', '/api/vpn/apply', { ...config, confirm: true }),
 
   listFiles: (path) => request('GET', `/api/files?path=${encodeURIComponent(path ?? '')}`),
   makeFolder: (path, name) => request('POST', '/api/files/mkdir', { path, name }),

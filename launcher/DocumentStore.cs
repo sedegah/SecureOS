@@ -10,7 +10,7 @@ internal sealed record DocumentRead(DocumentReadStatus Status, byte[] Data, bool
 /// atomically, keeping the previous good copy as a .bak. Vault payloads are ciphertext only.
 internal sealed class DocumentStore(PathManager paths)
 {
-    private static readonly string[] Allowed = ["notes", "bookmarks", "settings", "vault"];
+    private static readonly string[] Allowed = ["notes", "bookmarks", "settings", "vpn", "vault"];
 
     public static bool IsAllowed(string name) => Allowed.Contains(name);
 
@@ -19,6 +19,7 @@ internal sealed class DocumentStore(PathManager paths)
         "notes" => Path.Combine(paths.NotesDir, "notes.json"),
         "bookmarks" => Path.Combine(paths.BookmarksDir, "bookmarks.json"),
         "settings" => Path.Combine(paths.SettingsDir, "settings.json"),
+        "vpn" => Path.Combine(paths.SettingsDir, "vpn.json"),
         "vault" => Path.Combine(paths.VaultDir, "vault.enc"),
         _ => throw new ArgumentException("Unknown document.", nameof(name)),
     };

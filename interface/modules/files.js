@@ -149,10 +149,29 @@ function breadcrumb() {
   return trail;
 }
 
-function toolbar() {
-  const entry = selectedEntry();
-  const disabled = entry ? null : true;
+async function newFolder() {
+  const name = await promptDialog({ title: 'New folder', label: 'Folder name', placeholder: 'Documents', confirmLabel: 'Create' });
+  if (!name) return;
+  try {
+    await api.makeFolder(currentPath, name);
+    toast('Folder created.');
+    await refresh();
+  } catch (error) {
+    reportError(error);
+  }
+}
 
+function stageTransfer(move) {
+  const entry = selectedEntry();
+  if (!entry) return;
+  clipboard = { path: entryPath(entry), move };
+  toast(move
+    ? `Ready to move ${entry.name}. Open the destination folder and choose Paste.`
+    : `Copied ${entry.name}. Open a folder and choose Paste.`);
+  render();
+}
+
+function toolbar() {
   const filter = h('input', {
     class: 'input input-inline',
     type: 'search',
@@ -167,35 +186,8 @@ function toolbar() {
     breadcrumb(),
     filter,
     h('div', { class: 'toolbar-actions' },
-      h('button', { class: 'btn', type: 'button', disabled, onClick: () => activate(entry) }, icon('open'), 'Open'),
-      h('button', { class: 'btn', type: 'button', disabled, onClick: renameSelected }, icon('pencil'), 'Rename'),
-      h('button', {
-        class: 'btn', type: 'button', disabled,
-        onClick: () => { clipboard = { path: entryPath(entry), move: false }; toast(`Copied ${entry.name}. Open a folder and choose Paste.`); render(); },
-      }, icon('copy'), 'Copy'),
-      h('button', {
-        class: 'btn', type: 'button', disabled,
-        onClick: () => { clipboard = { path: entryPath(entry), move: true }; toast(`Ready to move ${entry.name}. Open the destination folder and choose Paste.`); render(); },
-      }, icon('move'), 'Move'),
-      h('button', { class: 'btn btn-danger', type: 'button', disabled, onClick: deleteSelected }, icon('trash'), 'Delete'),
-      clipboard ? h('button', { class: 'btn btn-primary', type: 'button', onClick: pasteClipboard }, icon('check'), clipboard.move ? 'Paste (move)' : 'Paste (copy)') : null,
-      h('button', {
-        class: 'btn', type: 'button',
-        onClick: async () => {
-          const name = await promptDialog({ title: 'New folder', label: 'Folder name', placeholder: 'Documents', confirmLabel: 'Create' });
-          if (!name) return;
-          try {
-            await api.makeFolder(currentPath, name);
-            toast('Folder created.');
-            await refresh();
-          } catch (error) {
-            reportError(error);
-          }
-        },
-      }, icon('plus'), 'New folder'),
-      h('button', { class: 'btn', type: 'button', onClick: refresh }, icon('refresh'), 'Refresh'),
-      h('button', { class: 'btn', type: 'button', onClick: () => { location.hash = '#/downloads'; } }, icon('downloads'), 'Downloads'),
-    ));
+      clipboard ? h('button', { class: 'btn btn-primary', type: 'button', onClick: pasteClipboard }, icon('paste'), clipboard.move ? 'Paste (move)' : 'Paste (copy)') : null,
+      h('button', { class: 'btn', type: 'button', onClick: refresh }, icon('refresh'), 'Refresh')));
 }
 
 function renderTable() {
@@ -246,10 +238,20 @@ function renderTable() {
 
 function render() {
   clear(container);
+  const entry = selectedEntry();
+  const disabled = entry ? null : true;
+
   container.append(
     h('header', { class: 'section-head' },
-      h('div', {}, h('h1', { text: 'Files' }), h('p', { class: 'section-sub', text: 'Browse and organise the documents on your Surge USB.' })),
-      h('span', { class: 'chip chip-quiet', text: 'USB only' })),
+      h('div', {}, h('h1', { text: 'Files' }),
+        h('p', { class: 'section-sub', text: listing.path ? `SURGE / ${listing.path.split('/').join(' / ')}` : 'SURGE USB' })),
+      h('div', { class: 'section-actions' },
+        h('button', { class: 'btn', type: 'button', onClick: newFolder }, icon('folderAdd'), 'New folder'),
+        h('button', { class: 'btn', type: 'button', disabled, onClick: () => activate(entry) }, icon('open'), 'Open'),
+        h('button', { class: 'btn', type: 'button', disabled, onClick: renameSelected }, icon('rename'), 'Rename'),
+        h('button', { class: 'btn', type: 'button', disabled, onClick: () => stageTransfer(false) }, icon('copy'), 'Copy'),
+        h('button', { class: 'btn', type: 'button', disabled, onClick: () => stageTransfer(true) }, icon('move'), 'Move'),
+        h('button', { class: 'btn btn-danger', type: 'button', disabled, onClick: deleteSelected }, icon('trash'), 'Delete'))),
     toolbar(),
     h('div', { class: 'table-wrap' },
       h('table', { class: 'table' },
@@ -260,6 +262,6 @@ function render() {
           h('th', { scope: 'col', text: 'Modified' }))),
         h('tbody', { id: 'file-rows' }))),
     h('p', { class: 'table-summary', id: 'file-summary' }),
-    h('p', { class: 'hint', text: 'Double-click or press Enter to open. Surge stays inside its own USB folder and never scans this computer.' }));
+    h('p', { class: 'hint', text: 'Showing the Surge USB only. Delete asks for confirmation. Double-click or press Enter to open.' }));
   renderTable();
 }

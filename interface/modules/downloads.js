@@ -79,15 +79,15 @@ function render() {
     h('td', { class: 'cell-date', text: formatDate(entry.modified) }),
     h('td', { class: 'cell-actions' },
       h('button', { class: 'btn btn-small', type: 'button', onClick: () => openFile(entry) }, icon('open', 15), 'Open'),
-      h('button', { class: 'btn btn-small', type: 'button', onClick: () => api.reveal(`${DOWNLOADS_PATH}/${entry.name}`).catch(reportError) }, icon('files', 15), 'Show in folder'),
+      h('button', { class: 'btn btn-small', type: 'button', onClick: () => api.reveal(`${DOWNLOADS_PATH}/${entry.name}`).catch(reportError) }, icon('folderOpen', 15), 'Show in folder'),
       h('button', { class: 'btn btn-small btn-danger', type: 'button', onClick: () => deleteFile(entry) }, icon('trash', 15), 'Delete'))));
 
   container.append(
     h('header', { class: 'section-head' },
       h('div', {}, h('h1', { text: 'Downloads' }),
-        h('p', { class: 'section-sub', text: 'Firefox saves every download to SURGE/Downloads on this USB drive.' })),
-      h('div', { class: 'toolbar-actions' },
-        h('button', { class: 'btn', type: 'button', onClick: () => api.open(DOWNLOADS_PATH).catch(reportError) }, icon('files'), 'Open folder'),
+        h('p', { class: 'section-sub', text: 'SURGE / Downloads' })),
+      h('div', { class: 'section-actions' },
+        h('button', { class: 'btn', type: 'button', onClick: () => api.open(DOWNLOADS_PATH).catch(reportError) }, icon('folderOpen'), 'Open folder'),
         h('button', { class: 'btn', type: 'button', onClick: refresh }, icon('refresh'), 'Refresh'))),
     storageNotice(),
     h('div', { class: 'table-wrap' },
@@ -97,7 +97,7 @@ function render() {
           h('th', { scope: 'col', text: 'Size' }),
           h('th', { scope: 'col', text: 'Downloaded' }),
           h('th', { scope: 'col', text: 'Actions' }))),
-        h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { colspan: '4' }, emptyState('No downloads yet. Files you save in Firefox appear here.')))))),
+        h('tbody', {}, rows.length ? rows : h('tr', {}, h('td', { colspan: '4' }, emptyState('No downloads yet. Files you save in Surge Browser appear here.')))))),
     h('p', { class: 'table-summary', text: entries.length > RENDER_LIMIT ? `${entries.length} files • showing the ${RENDER_LIMIT} most recent` : `${entries.length} file${entries.length === 1 ? '' : 's'}` }));
 }
 

@@ -1,14 +1,17 @@
 import { api, bus } from './api.js';
-import { h, clear, toast, reportError, confirmDialog, formDialog, emptyState, formatDate } from './ui.js';
+import { h, clear, toast, reportError, confirmDialog, formDialog, emptyState, formatDate, formatBytes } from './ui.js';
 import { icon } from './icons.js';
 import { getSettings } from './settings.js';
-import { createVault, unlockVault, sealVault, masterPasswordStrength, MIN_MASTER_LENGTH, VaultError } from './vault-crypto.js';
+import { createVault, unlockVault, sealVault, masterPasswordStrength, MIN_MASTER_LENGTH, VaultError, MAX_VAULT_FILE_BYTES, encryptVaultFile, decryptVaultFile } from './vault-crypto.js';
 
 let container = null;
 let state = 'unknown';
 let envelope = null;
 let key = null;
 let entries = [];
+let vaultFiles = [];
+let fileBusy = false;
+let selectedId = null;
 let query = '';
 let errorMessage = '';
 let revealed = new Set();
@@ -16,9 +19,26 @@ let lastActivity = Date.now();
 let clipboardTimer = null;
 let lockTicker = null;
 let activityBound = false;
+let session = new AbortController();
+let writes = Promise.resolve();
+
+function serializeWrite(operation) {
+  const result = writes.then(operation);
+  writes = result.catch(() => {});
+  return result;
+}
+
+bus.addEventListener('usb', (event) => {
+  if (event.detail?.present === false) lock();
+});
+bus.addEventListener('helper-lost', () => lock());
 
 function lockMinutes() {
   return Math.max(1, Number(getSettings().vaultLockMinutes) || 5);
+}
+
+function clipboardSeconds() {
+  return Math.max(5, Number(getSettings().clipboardClearSeconds) || 20);
 }
 
 function bindActivity() {
@@ -35,17 +55,26 @@ function bindActivity() {
     } else if (container?.isConnected) {
       updateLockCountdown();
     }
-  }, 15000);
+  }, 1000);
   bus.addEventListener('settings-changed', () => { lastActivity = Date.now(); });
 }
 
 export function lock() {
+  session.abort();
+  session = new AbortController();
   key = null;
   entries = [];
+  vaultFiles = [];
+  fileBusy = false;
+  query = '';
+  void window.surgeDesktop?.cancelVaultExport().catch(() => {});
+  selectedId = null;
   revealed = new Set();
   void clearClipboard();
-  state = envelope ? 'locked' : 'no-vault';
-  errorMessage = '';
+  if (state !== 'unknown' && state !== 'corrupt') {
+    state = envelope ? 'locked' : 'no-vault';
+    errorMessage = '';
+  }
   if (container?.isConnected) render();
 }
 
@@ -53,9 +82,130 @@ export function isUnlocked() {
   return state === 'unlocked';
 }
 
-async function persist() {
-  envelope = await sealVault(key, envelope, { version: 1, entries });
-  await api.writeVault(envelope);
+async function persist(change, signal, changeFiles = (current) => current) {
+  return serializeWrite(async () => {
+    if (signal.aborted || state !== 'unlocked') return false;
+    const nextEntries = change(entries);
+    const nextFiles = changeFiles(vaultFiles);
+    const next = await sealVault(key, envelope, { version: 1, entries: nextEntries, files: nextFiles });
+    if (signal.aborted) return false;
+    await api.writeVault(next);
+    envelope = next;
+    if (signal.aborted) return false;
+    entries = nextEntries;
+    vaultFiles = nextFiles;
+    return true;
+  });
+}
+
+async function importFiles(selected) {
+  if (state !== 'unlocked' || fileBusy) return;
+  const { signal } = session;
+  fileBusy = true;
+  render();
+  try {
+    for (const file of selected) {
+      if (signal.aborted) return;
+      if (file.size > MAX_VAULT_FILE_BYTES) throw new Error('Each vault file must be 16 MiB or smaller.');
+      if (vaultFiles.length >= 1000) throw new Error('The vault supports up to 1,000 files.');
+      const id = crypto.randomUUID();
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let sealed;
+      try {
+        if (signal.aborted) return;
+        sealed = await encryptVaultFile(key, envelope, id, bytes);
+      } finally { bytes.fill(0); }
+      if (signal.aborted) return;
+      await api.writeVaultFile(id, sealed);
+      if (signal.aborted) return;
+      const metadata = { id, name: file.name, size: file.size };
+      const saved = await persist((current) => current, signal, (current) => [...current, metadata]);
+      if (!saved || signal.aborted) return;
+      toast('Encrypted file saved. The original file was not removed.');
+    }
+  } catch (error) {
+    if (!signal.aborted) reportError(error);
+  } finally {
+    if (!signal.aborted) { fileBusy = false; render(); }
+  }
+}
+
+async function exportFile(file) {
+  if (state !== 'unlocked' || fileBusy || !window.surgeDesktop) return;
+  const { signal } = session;
+  const confirmed = await confirmDialog({
+    signal, title: 'Export an unencrypted copy?', confirmLabel: 'Choose destination',
+    message: `An ordinary, unencrypted copy of "${file.name}" will be written to your chosen folder. It will remain readable after the vault locks.`,
+  });
+  if (!confirmed || signal.aborted) return;
+  fileBusy = true;
+  render();
+  let bytes;
+  try {
+    const ticket = await window.surgeDesktop.chooseVaultExport(file.name);
+    if (!ticket || signal.aborted) return;
+    const sealed = await api.readVaultFile(file.id);
+    if (signal.aborted) return;
+    bytes = await decryptVaultFile(key, envelope, file.id, sealed);
+    if (signal.aborted) return;
+    if (bytes.byteLength !== file.size) throw new Error('The encrypted file size does not match the vault record.');
+    await window.surgeDesktop.writeVaultExport(ticket, bytes);
+    if (!signal.aborted) toast('Unencrypted copy exported. The encrypted original remains in the vault.');
+  } catch (error) {
+    if (!signal.aborted) reportError(error);
+  } finally {
+    bytes?.fill(0);
+    void window.surgeDesktop.cancelVaultExport().catch(() => {});
+    if (!signal.aborted) { fileBusy = false; render(); }
+  }
+}
+
+async function removeFile(file) {
+  if (state !== 'unlocked' || fileBusy) return;
+  const { signal } = session;
+  const confirmed = await confirmDialog({
+    signal, title: 'Delete encrypted file?', confirmLabel: 'Delete', danger: true,
+    message: `Delete "${file.name}" from this vault? Keep an exported copy if you need it. Other backups and original files are not removed; this is not secure erasure.`,
+  });
+  if (!confirmed || signal.aborted) return;
+  fileBusy = true;
+  render();
+  try {
+    const saved = await persist((current) => current, signal, (current) => current.filter((item) => item.id !== file.id));
+    if (!saved || signal.aborted) return;
+    await api.removeVaultFile(file.id);
+    if (!signal.aborted) toast('Encrypted file deleted from the vault.');
+  } catch (error) {
+    if (!signal.aborted) reportError(error);
+  } finally {
+    if (!signal.aborted) { fileBusy = false; render(); }
+  }
+}
+
+function encryptedFilesView() {
+  const picker = h('input', { type: 'file', multiple: true, hidden: true, id: 'vault-file-input',
+    onChange: () => {
+      const selected = [...picker.files];
+      picker.value = '';
+      void importFiles(selected);
+    } });
+  const list = h('div', { class: 'stack', id: 'vault-files' });
+  for (const file of vaultFiles) {
+    list.append(h('div', { class: 'info-row' },
+      h('span', { class: 'info-label' }, icon('file'), ' ', h('span', { text: file.name })),
+      h('span', { class: 'mono', text: formatBytes(file.size) }),
+      h('div', { class: 'section-actions' },
+        h('button', { class: 'btn btn-small', type: 'button', disabled: fileBusy || !window.surgeDesktop, onClick: () => { void exportFile(file); } }, icon('export'), 'Export copy'),
+        h('button', { class: 'btn btn-small btn-danger', type: 'button', disabled: fileBusy, onClick: () => { void removeFile(file); } }, icon('trash'), 'Delete'))));
+  }
+  if (!vaultFiles.length) list.append(emptyState('No private files yet. Import a file to encrypt it.'));
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' }, h('h2', { text: 'Private files' }),
+      h('button', { class: 'btn btn-primary', type: 'button', disabled: fileBusy, onClick: () => picker.click() }, icon('import'), 'Import files')),
+    picker,
+    h('p', { class: 'hint', text: 'Up to 16 MiB per file. Names and contents are encrypted; only opaque encrypted storage is visible on disk. Import copies the file: remove the original separately if you no longer want a readable copy.' }),
+    fileBusy ? h('p', { role: 'status', text: 'Working on encrypted files…' }) : null,
+    list);
 }
 
 async function loadVault() {
@@ -83,10 +233,10 @@ async function copySecret(value, label) {
   try {
     await navigator.clipboard.writeText(value);
   } catch {
-    toast('Firefox blocked clipboard access. Use the show button and copy manually.', 'error');
+    toast('Clipboard access was blocked. Use the show button and copy manually.', 'error');
     return;
   }
-  const seconds = Math.max(5, Number(getSettings().clipboardClearSeconds) || 20);
+  const seconds = clipboardSeconds();
   toast(`${label} copied. Clipboard clears in ${seconds}s.`);
   clearTimeout(clipboardTimer);
   clipboardTimer = setTimeout(() => { void clearClipboard(); }, seconds * 1000);
@@ -110,7 +260,7 @@ function createView() {
 
   master.addEventListener('input', () => clear(meter).append(strengthMeter(master.value)));
 
-  const submit = h('button', { class: 'btn btn-primary', type: 'button' }, icon('passwords'), 'Create encrypted vault');
+  const submit = h('button', { class: 'btn btn-primary btn-block', type: 'button' }, icon('lock'), 'Create encrypted vault');
   submit.addEventListener('click', async () => {
     feedback.textContent = '';
     if (master.value.length < MIN_MASTER_LENGTH) {
@@ -129,6 +279,7 @@ function createView() {
       return;
     }
 
+    const { signal } = session;
     const password = master.value;
     master.value = '';
     confirm.value = '';
@@ -136,14 +287,24 @@ function createView() {
     render();
     try {
       const created = await createVault(password);
-      await api.writeVault(created.envelope);
-      envelope = created.envelope;
-      key = created.key;
-      entries = [];
-      state = 'unlocked';
-      lastActivity = Date.now();
-      toast('Vault created and encrypted on the USB drive.');
+      const saved = await serializeWrite(async () => {
+        if (signal.aborted) return false;
+        await api.writeVault(created.envelope);
+        envelope = created.envelope;
+        if (signal.aborted) {
+          if (state === 'no-vault') state = 'locked';
+          return false;
+        }
+        key = created.key;
+        entries = [];
+        vaultFiles = [];
+        state = 'unlocked';
+        lastActivity = Date.now();
+        return true;
+      });
+      if (saved) toast('Vault created and encrypted on the USB drive.');
     } catch (error) {
+      if (signal.aborted) { reportError(error); return; }
       state = 'no-vault';
       errorMessage = error.message;
       reportError(error);
@@ -152,8 +313,8 @@ function createView() {
   });
 
   return h('div', { class: 'card vault-card' },
-    h('h2', { class: 'card-title', text: 'Create your password vault' }),
-    h('p', { text: 'The vault is encrypted on this USB drive with AES-256-GCM. The key is derived from your master password with Argon2id. Surge never stores the master password, and nothing is sent to any cloud service.' }),
+    h('h2', { class: 'vault-title', text: 'Create your vault' }),
+    h('p', { class: 'vault-note', text: 'The vault is encrypted on this USB drive with AES-256-GCM. The key is derived from your master password with Argon2id. Surge never stores the master password, and nothing is sent to any cloud service.' }),
     h('div', { class: 'banner banner-warn' }, icon('warning'),
       h('div', {},
         h('strong', { text: 'There is no recovery' }),
@@ -163,15 +324,16 @@ function createView() {
     h('label', { class: 'field', for: 'master-confirm' }, h('span', { class: 'field-label', text: 'Repeat master password' }), confirm),
     h('label', { class: 'checkbox', for: 'master-understood' }, understood, h('span', { text: 'I understand that a forgotten master password cannot be recovered.' })),
     feedback,
-    h('div', { class: 'dialog-actions' }, submit));
+    submit);
 }
 
 function lockedView() {
-  const master = h('input', { class: 'input', type: 'password', id: 'master-unlock', autocomplete: 'current-password', spellcheck: 'false' });
+  const master = h('input', { class: 'input', type: 'password', id: 'master-unlock', autocomplete: 'current-password', spellcheck: 'false', placeholder: 'Master password', 'aria-label': 'Master password' });
   const feedback = h('p', { class: 'form-error', role: 'alert', text: errorMessage });
-  const submit = h('button', { class: 'btn btn-primary', type: 'button' }, icon('lockOpen'), 'Unlock vault');
+  const submit = h('button', { class: 'btn btn-primary btn-block', type: 'button' }, icon('lockOpen'), 'Unlock');
 
   const attempt = async () => {
+    const { signal } = session;
     const password = master.value;
     master.value = '';
     if (!password) {
@@ -183,17 +345,22 @@ function lockedView() {
     errorMessage = '';
     render();
     try {
+      await writes;
+      if (signal.aborted) return;
       const opened = await unlockVault(envelope, password);
+      if (signal.aborted) return;
       key = opened.key;
       entries = opened.vault.entries;
+      vaultFiles = opened.vault.files;
       state = 'unlocked';
       lastActivity = Date.now();
     } catch (error) {
+      if (signal.aborted) return;
       state = 'locked';
       errorMessage = error instanceof VaultError ? error.message : 'The vault could not be unlocked.';
     }
     render();
-    if (state === 'locked') container.querySelector('#master-unlock')?.focus();
+    if (state === 'locked') container?.querySelector('#master-unlock')?.focus();
   };
 
   submit.addEventListener('click', attempt);
@@ -202,30 +369,34 @@ function lockedView() {
   });
 
   return h('div', { class: 'card vault-card' },
-    h('h2', { class: 'card-title', text: 'Vault locked' }),
-    h('p', { text: 'Enter your master password to decrypt the vault on this USB drive. Unlocking derives a key with Argon2id, which takes a moment.' }),
-    h('label', { class: 'field', for: 'master-unlock' }, h('span', { class: 'field-label', text: 'Master password' }), master),
+    h('h2', { class: 'vault-title', text: 'Vault locked' }),
+    h('p', { class: 'vault-note', text: 'Enter your master password. It is never stored, and it cannot be recovered if you forget it.' }),
+    master,
     feedback,
-    h('div', { class: 'dialog-actions' }, submit),
-    h('p', { class: 'hint', text: envelope?.updatedAt ? `Vault last saved ${formatDate(envelope.updatedAt)}.` : '' }));
+    submit,
+    h('p', { class: 'vault-foot', text: 'Locks automatically after inactivity' }),
+    envelope?.updatedAt ? h('p', { class: 'vault-foot', text: `Vault last saved ${formatDate(envelope.updatedAt)}.` }) : null);
 }
 
 function busyView() {
   return h('div', { class: 'card vault-card' },
-    h('h2', { class: 'card-title', text: 'Working…' }),
-    h('p', { text: 'Deriving the encryption key with Argon2id. This deliberately takes a moment to slow down password guessing.' }));
+    h('h2', { class: 'vault-title', text: 'Working…' }),
+    h('p', { class: 'vault-note', text: 'Deriving the encryption key with Argon2id. This deliberately takes a moment to slow down password guessing.' }));
 }
 
 function corruptView() {
   return h('div', { class: 'card vault-card' },
-    h('h2', { class: 'card-title', text: 'Vault file damaged' }),
+    h('h2', { class: 'vault-title', text: 'Vault file damaged' }),
     h('div', { class: 'banner banner-error', role: 'alert' }, icon('warning'),
       h('div', {}, h('strong', { text: 'Surge will not overwrite this vault' }), h('p', { text: errorMessage }))),
-    h('p', { text: 'Restore Data/PasswordVault/vault.enc (or its .bak copy) from your own backup, then reopen this page. Creating a new vault here would destroy the existing entries.' }));
+    h('p', { class: 'vault-note', text: 'Restore Data/PasswordVault/vault.enc (or its .bak copy) from your own backup, then reopen this page. Creating a new vault here would destroy the existing entries.' }));
 }
 
 async function editEntry(entry = null) {
+  if (state !== 'unlocked') return;
+  const { signal } = session;
   const values = await formDialog({
+    signal,
     title: entry ? 'Edit password' : 'Add password',
     confirmLabel: entry ? 'Save' : 'Add',
     fields: [
@@ -236,14 +407,18 @@ async function editEntry(entry = null) {
       { name: 'notes', label: 'Notes', type: 'textarea', rows: 3, value: entry?.notes ?? '' },
     ],
   });
-  if (!values) return;
+  if (!values || signal.aborted || state !== 'unlocked') return;
 
   const now = new Date().toISOString();
-  if (entry) Object.assign(entry, values, { modifiedAt: now });
-  else entries.push({ id: crypto.randomUUID(), ...values, createdAt: now, modifiedAt: now });
-
+  const id = entry?.id ?? crypto.randomUUID();
   try {
-    await persist();
+    const saved = await persist((current) => {
+      if (!entry) return [...current, { id, ...values, createdAt: now, modifiedAt: now }];
+      if (!current.some((item) => item.id === id)) throw new Error('This password entry is no longer available.');
+      return current.map((item) => item.id === id ? { ...item, ...values, modifiedAt: now } : item);
+    }, signal);
+    if (!saved || signal.aborted) return;
+    if (!entry) selectedId = id;
     toast(entry ? 'Password updated.' : 'Password added.');
     render();
   } catch (error) {
@@ -252,17 +427,21 @@ async function editEntry(entry = null) {
 }
 
 async function removeEntry(entry) {
+  if (state !== 'unlocked') return;
+  const { signal } = session;
   const ok = await confirmDialog({
+    signal,
     title: 'Delete password?',
     message: `"${entry.title}" will be removed from the encrypted vault. This cannot be undone.`,
     confirmLabel: 'Delete',
     danger: true,
   });
-  if (!ok) return;
-  entries = entries.filter((item) => item.id !== entry.id);
-  revealed.delete(entry.id);
+  if (!ok || signal.aborted || state !== 'unlocked') return;
   try {
-    await persist();
+    const saved = await persist((current) => current.filter((item) => item.id !== entry.id), signal);
+    if (!saved || signal.aborted) return;
+    revealed.delete(entry.id);
+    if (selectedId === entry.id) selectedId = null;
     toast('Password deleted.');
     render();
   } catch (error) {
@@ -274,7 +453,8 @@ function updateLockCountdown() {
   const node = container?.querySelector('#lock-countdown');
   if (!node) return;
   const remaining = Math.max(0, lockMinutes() * 60000 - (Date.now() - lastActivity));
-  node.textContent = `Auto-lock in ${Math.ceil(remaining / 60000)} min`;
+  const seconds = Math.ceil(remaining / 1000);
+  node.textContent = `Vault unlocked · locks in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function vaultMatches() {
@@ -284,76 +464,90 @@ function vaultMatches() {
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
-function vaultRow(entry) {
-  const shown = revealed.has(entry.id);
-  return h('tr', { class: 'row' },
-    h('td', { class: 'cell-name' }, icon('passwords', 16), h('span', { text: entry.title })),
-    h('td', { text: entry.username || '—' }),
-    h('td', { class: 'cell-secret' },
-      h('code', { text: shown ? entry.password : '••••••••••' }),
-      h('button', {
-        class: 'btn btn-icon', type: 'button', 'aria-label': shown ? 'Hide password' : 'Show password',
-        dataset: { reveal: entry.id },
-        onClick: () => {
-          if (shown) revealed.delete(entry.id); else revealed.add(entry.id);
-          renderVaultRows();
-          container.querySelector(`[data-reveal="${CSS.escape(entry.id)}"]`)?.focus();
-        },
-      }, icon(shown ? 'eyeOff' : 'eye', 15))),
-    h('td', { class: 'cell-url' }, entry.url
-      ? h('a', { href: entry.url, target: '_blank', rel: 'noopener noreferrer', text: entry.url })
-      : '—'),
-    h('td', { class: 'cell-actions' },
-      h('button', { class: 'btn btn-small', type: 'button', onClick: () => copySecret(entry.username ?? '', 'Username') }, icon('copy', 15), 'User'),
-      h('button', { class: 'btn btn-small', type: 'button', onClick: () => copySecret(entry.password, 'Password') }, icon('copy', 15), 'Password'),
-      h('button', { class: 'btn btn-small', type: 'button', onClick: () => editEntry(entry) }, icon('pencil', 15), 'Edit'),
-      h('button', { class: 'btn btn-small btn-danger', type: 'button', onClick: () => removeEntry(entry) }, icon('trash', 15), 'Delete')));
+function renderVaultList() {
+  const list = container?.querySelector('#vault-list');
+  if (!list) return;
+  clear(list);
+  const matches = vaultMatches();
+  if (!matches.length) {
+    list.append(emptyState(query ? 'No entries match that search.' : 'The vault is empty. Add your first password.'));
+    return;
+  }
+  for (const entry of matches) {
+    list.append(h('button', {
+      class: entry.id === selectedId ? 'note-item selected' : 'note-item',
+      type: 'button',
+      'aria-current': entry.id === selectedId ? 'true' : null,
+      onClick: () => { selectedId = entry.id; renderVaultList(); renderDetail(); },
+    },
+    h('span', { class: 'note-item-title', text: entry.title }),
+    h('span', { class: 'note-item-meta', text: entry.username || entry.url || 'No username' })));
+  }
 }
 
-function renderVaultRows() {
-  const body = container?.querySelector('#vault-rows');
-  const summary = container?.querySelector('#vault-summary');
-  if (!body) return;
-  clear(body);
-  const matches = vaultMatches();
-  for (const entry of matches) body.append(vaultRow(entry));
-  if (!matches.length) {
-    body.append(h('tr', {}, h('td', { colspan: '5' }, emptyState(query ? 'No entries match that search.' : 'The vault is empty. Add your first password.'))));
+function secretField(label, value, actions = [], mono = false) {
+  return h('div', { class: 'secret-field' },
+    h('span', { class: 'field-label', text: label }),
+    h('div', { class: 'secret-box' },
+      h('span', { class: mono ? 'secret-value mono' : 'secret-value', text: value }),
+      actions.length ? h('span', { class: 'secret-actions' }, actions) : null));
+}
+
+function renderDetail() {
+  const pane = container?.querySelector('#vault-detail');
+  if (!pane) return;
+  clear(pane);
+
+  const entry = entries.find((item) => item.id === selectedId) ?? null;
+  if (!entry) {
+    pane.append(emptyState('Select an entry on the left, or add a new password.'));
+    return;
   }
-  if (summary) summary.textContent = `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} • encrypted with Argon2id + AES-256-GCM`;
+
+  const shown = revealed.has(entry.id);
+  const revealButton = h('button', {
+    class: 'btn btn-small', type: 'button', 'aria-pressed': shown ? 'true' : 'false',
+    onClick: () => {
+      if (shown) revealed.delete(entry.id); else revealed.add(entry.id);
+      renderDetail();
+    },
+  }, icon(shown ? 'eyeOff' : 'eye', 15), shown ? 'Hide' : 'Show');
+
+  pane.append(
+    h('h2', { class: 'vault-detail-title', text: entry.title }),
+    secretField('Username', entry.username || '—', [
+      h('button', { class: 'btn btn-small', type: 'button', onClick: () => copySecret(entry.username ?? '', 'Username') }, icon('copy', 15), 'Copy'),
+    ]),
+    secretField('Password', shown ? entry.password : '••••••••••••', [
+      revealButton,
+      h('button', { class: 'btn btn-small', type: 'button', onClick: () => copySecret(entry.password, 'Password') }, icon('copy', 15), 'Copy'),
+    ], true),
+    secretField('Website', entry.url || '—', entry.url
+      ? [h('a', { class: 'btn btn-small', href: entry.url, target: '_blank', rel: 'noopener noreferrer' }, icon('open', 15), 'Open')]
+      : []),
+    entry.notes ? secretField('Notes', entry.notes) : null,
+    h('p', { class: 'hint', text: `Clipboard clears ${clipboardSeconds()} seconds after copying.` }),
+    h('div', { class: 'section-actions' },
+      h('button', { class: 'btn', type: 'button', onClick: () => editEntry(entry) }, icon('pencil'), 'Edit'),
+      h('button', { class: 'btn btn-danger', type: 'button', onClick: () => removeEntry(entry) }, icon('trash'), 'Delete')));
 }
 
 function unlockedView() {
   const search = h('input', {
-    class: 'input input-inline', type: 'search', placeholder: 'Search vault', value: query, 'aria-label': 'Search vault entries',
-    onInput: (event) => { query = event.target.value; renderVaultRows(); },
+    class: 'input', type: 'search', placeholder: 'Search vault', value: query, 'aria-label': 'Search vault entries',
+    onInput: (event) => { query = event.target.value; renderVaultList(); renderDetail(); },
   });
 
-  return h('div', {},
-    h('div', { class: 'toolbar' },
-      search,
-      h('span', { class: 'chip chip-ok' }, icon('lockOpen', 14), 'Unlocked'),
-      h('span', { class: 'chip chip-quiet', id: 'lock-countdown' }),
-      h('div', { class: 'toolbar-actions' },
-        h('button', { class: 'btn btn-primary', type: 'button', onClick: () => editEntry() }, icon('plus'), 'Add password'),
-        h('button', { class: 'btn', type: 'button', onClick: () => { lock(); toast('Vault locked.'); } }, icon('passwords'), 'Lock now'))),
-    h('div', { class: 'table-wrap' },
-      h('table', { class: 'table' },
-        h('thead', {}, h('tr', {},
-          h('th', { scope: 'col', text: 'Name' }),
-          h('th', { scope: 'col', text: 'Username' }),
-          h('th', { scope: 'col', text: 'Password' }),
-          h('th', { scope: 'col', text: 'Website' }),
-          h('th', { scope: 'col', text: 'Actions' }))),
-        h('tbody', { id: 'vault-rows' }))),
-    h('p', { class: 'table-summary', id: 'vault-summary' }),
-    h('p', { class: 'hint', text: 'Passwords stay in this page while the vault is unlocked and are never written to disk in readable form. Firefox’s own password saving is switched off so the two stores do not compete.' }));
+  return h('div', { class: 'vault-layout' },
+    h('aside', { class: 'note-sidebar' }, search, h('div', { class: 'note-list', id: 'vault-list' })),
+    h('section', { class: 'card vault-detail', id: 'vault-detail' }));
 }
 
 function render() {
   if (!container) return;
   clear(container);
-  const view = state === 'unlocked' ? unlockedView()
+  const unlocked = state === 'unlocked';
+  const view = unlocked ? unlockedView()
     : state === 'locked' ? lockedView()
     : state === 'busy' ? busyView()
     : state === 'corrupt' ? corruptView()
@@ -361,13 +555,21 @@ function render() {
 
   container.append(
     h('header', { class: 'section-head' },
-      h('div', {}, h('h1', { text: 'Passwords' }),
-        h('p', { class: 'section-sub', text: 'A local encrypted vault on this USB drive. No cloud, no telemetry.' })),
-      state === 'unlocked' ? h('span', { class: 'chip chip-ok', text: `${entries.length} saved` }) : h('span', { class: 'chip chip-quiet', text: 'Locked by default' })),
-    view);
+      h('div', {}, h('h1', { text: 'Vault' }),
+        unlocked
+          ? h('p', { class: 'section-sub', id: 'lock-countdown' })
+          : h('p', { class: 'section-sub', text: 'A local encrypted vault on this USB drive. No cloud, no telemetry.' })),
+      unlocked
+        ? h('div', { class: 'section-actions' },
+          h('button', { class: 'btn btn-primary', type: 'button', onClick: () => editEntry() }, icon('plus'), 'Add entry'),
+          h('button', { class: 'btn btn-danger', type: 'button', onClick: () => { lock(); toast('Vault locked.'); } }, icon('lock'), 'Lock now'))
+        : h('span', { class: 'chip chip-quiet', text: 'Locked by default' })),
+    unlocked ? h('div', { class: 'stack' }, view, encryptedFilesView()) : h('div', { class: 'vault-lock' }, view));
 
-  if (state === 'unlocked') {
-    renderVaultRows();
+  if (unlocked) {
+    if (!selectedId || !entries.some((entry) => entry.id === selectedId)) selectedId = vaultMatches()[0]?.id ?? null;
+    renderVaultList();
+    renderDetail();
     updateLockCountdown();
   }
   if (state === 'locked') container.querySelector('#master-unlock')?.focus();
@@ -379,4 +581,8 @@ export async function mount(target) {
   if (state === 'unknown') await loadVault();
   if (state === 'unlocked' && Date.now() - lastActivity > lockMinutes() * 60000) lock();
   render();
+}
+
+export function stop() {
+  container = null;
 }

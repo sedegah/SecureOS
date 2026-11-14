@@ -142,11 +142,8 @@ if (-not $SkipSmokeTest) {
             return ($response.StatusCode -eq 200 -and $response.Content -match 'Surge Portable')
         }
 
-        Check 'note round trip persists to the USB' {
-            $note = @{ version = 1; notes = @(@{ id = 'verify'; title = 'Verify'; body = 'written by verify.ps1'; modifiedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }) } | ConvertTo-Json -Depth 6
-            Invoke-RestMethod -Uri "$base/api/doc/notes" -Method Put -Headers @{ 'X-Surge-Token' = $token } -ContentType 'application/json' -Body $note | Out-Null
-            $saved = Get-Content (Join-Path $Destination 'Data\Notes\notes.json') -Raw
-            return ($saved -match 'written by verify.ps1')
+        Check 'notes directory exists without modifying user data' {
+            return (Test-Path (Join-Path $Destination 'Data\Notes') -PathType Container)
         }
     } finally {
         if (-not $process.HasExited) { $process.Kill() }

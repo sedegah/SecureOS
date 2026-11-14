@@ -16,7 +16,7 @@ internal sealed class PathManager
     public const long MaxDocumentBytes = 32L * 1024 * 1024;
     public const long MaxVaultBytes = 8L * 1024 * 1024;
 
-    private static readonly string[] ProtectedEntries = ["Surge.exe", "Browser", "Interface", "README.txt"];
+    private static readonly string[] ProtectedEntries = ["Surge.exe", "Browser", "Interface", "resources", "locales", "README.txt", "Data/PasswordVault"];
 
     private PathManager(string root) => Root = root;
 
@@ -33,8 +33,14 @@ internal sealed class PathManager
 
     public bool UsbPresent => Directory.Exists(Root);
 
-    public static PathManager Detect()
+    public static PathManager Detect(string? root = null)
     {
+        if (root is not null)
+        {
+            if (!Path.IsPathFullyQualified(root) || !Directory.Exists(root))
+                throw new DirectoryNotFoundException("The Surge workspace folder does not exist.");
+            return new PathManager(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)));
+        }
         string exe = Environment.ProcessPath
             ?? throw new InvalidOperationException("Cannot determine the Surge executable location.");
         string dir = Path.GetDirectoryName(exe)
@@ -71,8 +77,14 @@ internal sealed class PathManager
 
     public bool IsProtected(string fullPath)
     {
-        string rel = ToRelative(fullPath);
-        return ProtectedEntries.Any(p => rel.Equals(p, StringComparison.OrdinalIgnoreCase));
+        // Windows also resolves names with trailing dots/spaces to the same item.
+        string rel = string.Join('/', ToRelative(Path.GetFullPath(fullPath)).Split('/')
+            .Select(part => part.TrimEnd('.', ' ')));
+        // Protect ancestors too: copying, moving or deleting Data would include the vault.
+        return rel.Length == 0 || rel.Equals("Data", StringComparison.OrdinalIgnoreCase) ||
+            ProtectedEntries.Any(p => rel.Equals(p, StringComparison.OrdinalIgnoreCase) ||
+            rel.StartsWith(p + "/", StringComparison.OrdinalIgnoreCase)) ||
+            (!rel.Contains('/') && Path.GetExtension(rel).ToLowerInvariant() is ".exe" or ".dll" or ".pak" or ".bin" or ".dat");
     }
 
     /// Resolves a workspace-relative path, refusing anything that escapes the Surge USB folder.

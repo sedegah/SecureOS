@@ -3,15 +3,37 @@ import { h, clear, newId, toast, reportError, confirmDialog, debounce, relativeT
 import { icon } from './icons.js';
 
 let notes = [];
+let readError = new Error('Notes have not been loaded. Writes are blocked.');
+let writes = Promise.resolve();
 
-export async function loadNotes() {
-  const stored = await api.readDocument('notes');
-  notes = Array.isArray(stored?.notes) ? stored.notes : [];
-  return notes;
+function serializeWrite(operation) {
+  const result = writes.then(operation);
+  writes = result.catch(() => {});
+  return result;
 }
 
-async function persist() {
-  await api.writeDocument('notes', { version: 1, notes });
+export async function loadNotes() {
+  return serializeWrite(async () => {
+    try {
+      const stored = await api.readDocument('notes');
+      if (stored !== null && (!Array.isArray(stored?.notes) || stored.notes.some((note) =>
+        !note || typeof note.id !== 'string' || typeof note.title !== 'string' || typeof note.body !== 'string'))) {
+        throw new Error('The notes document is damaged. Writes are blocked to protect it.');
+      }
+      notes = stored?.notes ?? [];
+      readError = null;
+      return notes;
+    } catch (error) {
+      readError = error;
+      throw error;
+    }
+  });
+}
+
+async function persist(nextNotes) {
+  if (readError) throw readError;
+  await api.writeDocument('notes', { version: 1, notes: nextNotes });
+  notes = nextNotes;
   bus.dispatchEvent(new Event('notes-changed'));
 }
 
@@ -31,24 +53,27 @@ export function getNote(id) {
 }
 
 export async function createNote() {
-  const now = new Date().toISOString();
-  const note = { id: newId(), title: 'Untitled note', body: '', createdAt: now, modifiedAt: now };
-  notes.unshift(note);
-  await persist();
-  return note;
+  return serializeWrite(async () => {
+    const now = new Date().toISOString();
+    const note = { id: newId(), title: 'Untitled note', body: '', createdAt: now, modifiedAt: now };
+    await persist([note, ...notes]);
+    return note;
+  });
 }
 
 export async function saveNote(id, patch) {
-  const note = getNote(id);
-  if (!note) return null;
-  Object.assign(note, patch, { modifiedAt: new Date().toISOString() });
-  await persist();
-  return note;
+  const captured = { ...patch };
+  return serializeWrite(async () => {
+    const note = getNote(id);
+    if (!note) return null;
+    const updated = { ...note, ...captured, modifiedAt: new Date().toISOString() };
+    await persist(notes.map((item) => item.id === id ? updated : item));
+    return updated;
+  });
 }
 
 export async function deleteNote(id) {
-  notes = notes.filter((note) => note.id !== id);
-  await persist();
+  return serializeWrite(() => persist(notes.filter((note) => note.id !== id)));
 }
 
 const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*|\[[^\]]+\]\((https?:\/\/[^\s)]+)\))/g;
@@ -162,50 +187,66 @@ let container = null;
 let selectedId = null;
 let query = '';
 let preview = false;
-let saveState = 'idle';
+const drafts = new Map();
+let revision = 0;
+let savingDraft = null;
+let pendingSave = null;
 
-const queueSave = debounce(() => { void flushSave(); }, 700);
+const queueSave = debounce(() => { void flushSave().catch(reportError); }, 700);
 
-async function flushSave() {
-  const note = getNote(selectedId);
-  if (!note || saveState === 'clean') return;
-  const title = container?.querySelector('#note-title');
-  const body = container?.querySelector('#note-body');
-  if (!title || !body) return;
-  saveState = 'saving';
-  updateSaveIndicator();
-  try {
-    await saveNote(note.id, { title: title.value.trim() || 'Untitled note', body: body.value });
-    saveState = 'clean';
-  } catch (error) {
-    saveState = 'dirty';
-    reportError(error);
-  }
-  updateSaveIndicator();
-  renderList();
+function flushSave() {
+  if (pendingSave) return pendingSave;
+  if (!drafts.size) return Promise.resolve();
+  pendingSave = (async () => {
+    try {
+      while (drafts.size) {
+        const draft = drafts.values().next().value;
+        savingDraft = draft;
+        updateSaveIndicator();
+        const saved = await saveNote(draft.id, { title: draft.title.trim() || 'Untitled note', body: draft.body });
+        if (!saved) throw new Error('This note is no longer available. Its unsaved draft has been retained.');
+        if (drafts.get(draft.id)?.revision === draft.revision) drafts.delete(draft.id);
+        renderList();
+      }
+    } finally {
+      savingDraft = null;
+      updateSaveIndicator();
+    }
+  })().finally(() => { pendingSave = null; });
+  return pendingSave;
 }
 
 function updateSaveIndicator() {
   const indicator = container?.querySelector('#note-saved');
   if (!indicator) return;
   const note = getNote(selectedId);
-  indicator.textContent = saveState === 'saving' ? 'Saving…'
-    : saveState === 'dirty' ? 'Not saved yet'
-    : note ? `Saved ${relativeTime(note.modifiedAt)}` : '';
+  const draft = drafts.get(selectedId);
+  const saveState = readError ? 'blocked' : draft
+    ? savingDraft?.revision === draft.revision ? 'saving' : 'dirty'
+    : 'clean';
+  indicator.textContent = saveState === 'saving' ? '● SAVING…'
+    : saveState === 'dirty' || saveState === 'blocked' ? '● NOT SAVED'
+    : note ? '● SAVED' : '';
   indicator.dataset.state = saveState;
 }
 
 function markDirty() {
-  saveState = 'dirty';
+  const title = container?.querySelector('#note-title');
+  const body = container?.querySelector('#note-body');
+  if (!selectedId || !title || !body) return;
+  drafts.set(selectedId, { id: selectedId, title: title.value, body: body.value, revision: ++revision });
   updateSaveIndicator();
   queueSave();
 }
 
 async function selectNote(id) {
-  await flushSave();
-  selectedId = id;
-  saveState = 'clean';
-  render();
+  try {
+    await flushSave();
+    selectedId = id;
+    render();
+  } catch (error) {
+    reportError(error);
+  }
 }
 
 async function removeSelected() {
@@ -219,9 +260,9 @@ async function removeSelected() {
   });
   if (!ok) return;
   try {
+    await flushSave();
     await deleteNote(note.id);
     selectedId = listNotes(query)[0]?.id ?? null;
-    saveState = 'clean';
     toast('Note deleted.');
     render();
   } catch (error) {
@@ -258,19 +299,20 @@ function editor() {
     return h('div', { class: 'editor empty-editor' }, emptyState('Select a note on the left, or create a new one.'));
   }
 
+  const draft = drafts.get(note.id) ?? note;
   const title = h('input', {
-    class: 'input note-title', id: 'note-title', type: 'text', value: note.title,
+    class: 'input note-title', id: 'note-title', type: 'text', value: draft.title,
     'aria-label': 'Note title', onInput: markDirty,
   });
   const body = h('textarea', {
     class: 'input note-body', id: 'note-body', rows: 18, spellcheck: 'true',
     'aria-label': 'Note text', placeholder: 'Write in plain text or Markdown…', onInput: markDirty,
   });
-  body.value = note.body;
+  body.value = draft.body;
 
   const previewPane = h('div', { class: 'note-preview', id: 'note-preview' });
   if (preview) {
-    clear(previewPane).append(renderMarkdown(note.body));
+    clear(previewPane).append(renderMarkdown(draft.body));
     previewPane.hidden = false;
     body.hidden = true;
   } else {
@@ -279,20 +321,30 @@ function editor() {
   }
 
   return h('div', { class: 'editor' },
-    title,
-    h('div', { class: 'editor-bar' },
-      h('button', {
-        class: 'btn btn-small', type: 'button', 'aria-pressed': preview ? 'true' : 'false',
-        onClick: async () => { await flushSave(); preview = !preview; render(); },
-      }, icon('eye'), preview ? 'Edit text' : 'Preview'),
-      h('button', { class: 'btn btn-small btn-danger', type: 'button', onClick: removeSelected }, icon('trash'), 'Delete note'),
-      h('span', { class: 'save-state', id: 'note-saved' })),
+    h('div', { class: 'note-title-row' }, title, h('span', { class: 'save-state', id: 'note-saved' })),
     body,
     previewPane,
-    h('p', { class: 'hint', text: 'Notes save automatically to Data/Notes/notes.json on the USB. Markdown: # heading, **bold**, *italic*, `code`, - list, [link](https://example.org).' }));
+    h('div', { class: 'editor-foot' },
+      h('span', { class: 'hint', text: `Last modified ${relativeTime(note.modifiedAt)}` }),
+      h('div', { class: 'section-actions' },
+        h('button', {
+          class: 'btn btn-small', type: 'button', 'aria-pressed': preview ? 'true' : 'false',
+          onClick: async () => {
+            try {
+              await flushSave();
+              preview = !preview;
+              render();
+            } catch (error) {
+              reportError(error);
+            }
+          },
+        }, icon('eye'), preview ? 'Edit text' : 'Preview'),
+        h('button', { class: 'btn btn-small btn-danger', type: 'button', onClick: removeSelected }, icon('trash'), 'Delete'))),
+    h('p', { class: 'hint', text: 'Markdown: # heading, **bold**, *italic*, `code`, - list, [link](https://example.org).' }));
 }
 
 function render() {
+  if (!container) return;
   clear(container);
   const search = h('input', {
     class: 'input', type: 'search', placeholder: 'Search notes', value: query, 'aria-label': 'Search notes by title or content',
@@ -301,23 +353,24 @@ function render() {
 
   container.append(
     h('header', { class: 'section-head' },
-      h('div', {}, h('h1', { text: 'Notes' }), h('p', { class: 'section-sub', text: 'Offline personal notes, saved straight to the USB drive.' })),
+      h('div', {}, h('h1', { text: 'Notes' }), h('p', { class: 'section-sub', text: 'Saved to your USB automatically' })),
       h('button', {
-        class: 'btn btn-primary', type: 'button',
+        class: 'btn btn-primary', type: 'button', disabled: Boolean(readError),
         onClick: async () => {
-          await flushSave();
           try {
+            await flushSave();
             const note = await createNote();
             selectedId = note.id;
             query = '';
-            saveState = 'clean';
             render();
-            container.querySelector('#note-title')?.focus();
+            container?.querySelector('#note-title')?.focus();
           } catch (error) {
             reportError(error);
           }
         },
       }, icon('plus'), 'New note')),
+    ...(readError ? [h('div', { class: 'banner banner-error', role: 'alert' }, icon('warning'),
+      h('p', { text: `Notes could not be loaded. Writes are blocked to protect existing data. ${readError.message}` }))] : []),
     h('div', { class: 'notes-layout' },
       h('aside', { class: 'note-sidebar' }, search, h('ul', { class: 'note-list', id: 'note-list' })),
       editor()));
@@ -328,14 +381,22 @@ function render() {
 
 export async function mount(target) {
   container = target;
-  await flushSave();
   if (!selectedId || !getNote(selectedId)) selectedId = listNotes()[0]?.id ?? null;
-  saveState = 'clean';
   render();
 }
 
+// Rejects on failure so navigation can be blocked without discarding the draft.
 export async function flushPendingSave() {
   await flushSave();
+}
+
+export async function stop() {
+  const target = container;
+  try {
+    await flushPendingSave();
+  } finally {
+    if (container === target) container = null;
+  }
 }
 
 export function openNote(id) {
