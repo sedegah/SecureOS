@@ -1,0 +1,16 @@
+# Build output, packaged browser and downloaded installers are never committed.
+build/
+launcher/bin/
+launcher/obj/
+
+# Editor / OS noise
+.vs/
+.idea/
+*.user
+*.suo
+Thumbs.db
+desktop.ini
+
+# Test scratch
+tests/.tmp/
+node_modules/
