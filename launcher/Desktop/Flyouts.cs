@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -13,7 +14,7 @@ namespace SurgePortable.Desktop;
 // ============================================================================
 // 1. START MENU FLYOUT
 // ============================================================================
-public sealed class StartMenuFlyout : Border
+internal sealed class StartMenuFlyout : Border
 {
     private readonly Action<string> onLaunchApp;
     private readonly Action onLockSession;
@@ -279,7 +280,7 @@ public sealed class StartMenuFlyout : Border
 // ============================================================================
 // 2. CALENDAR FLYOUT (Live Clock & Calendar)
 // ============================================================================
-public sealed class CalendarFlyout : Border
+internal sealed class CalendarFlyout : Border
 {
     private readonly DesktopSettings settings;
     private readonly TextBlock digitalClockBlock;
@@ -521,7 +522,7 @@ public sealed class CalendarFlyout : Border
 // ============================================================================
 // 3. NOTIFICATION & QUICK SETTINGS FLYOUT
 // ============================================================================
-public sealed class NotificationFlyout : Border
+internal sealed class NotificationFlyout : Border
 {
     private readonly StackPanel notifList;
     private readonly TextBlock emptyNotice;
@@ -706,13 +707,30 @@ public sealed class NotificationFlyout : Border
         return tile;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SystemPowerStatus
+    {
+        public byte ACLineStatus;
+        public byte BatteryFlag;
+        public byte BatteryLifePercent;
+        public byte SystemStatusFlag;
+        public int BatteryLifeTime;
+        public int BatteryFullLifeTime;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetSystemPowerStatus(out SystemPowerStatus sps);
+
     private static string GetBatteryStatus()
     {
         try
         {
-            var power = System.Windows.Forms.SystemInformation.PowerStatus;
-            int pct = (int)(power.BatteryLifePercent * 100);
-            return $"{pct}% {(power.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online ? "AC" : "Batt")}";
+            if (GetSystemPowerStatus(out var status) && status.BatteryLifePercent <= 100)
+            {
+                string pwr = status.ACLineStatus == 1 ? "AC" : "Batt";
+                return $"{status.BatteryLifePercent}% {pwr}";
+            }
+            return "100% AC";
         }
         catch
         {
@@ -724,7 +742,7 @@ public sealed class NotificationFlyout : Border
 // ============================================================================
 // 4. LOCK SCREEN OVERLAY
 // ============================================================================
-public sealed class LockScreenControl : Border
+internal sealed class LockScreenControl : Border
 {
     private readonly PathManager paths;
     private readonly PasswordBox passBox;

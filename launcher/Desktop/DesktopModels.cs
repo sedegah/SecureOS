@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using System.Windows.Media;
 
@@ -5,9 +6,9 @@ namespace SurgePortable.Desktop;
 
 internal enum ShortcutSize
 {
-    Small = 48,
-    Medium = 64,
-    Large = 80
+    Small = 36,
+    Medium = 48,
+    Large = 64
 }
 
 internal sealed class DesktopShortcut
@@ -15,32 +16,38 @@ internal sealed class DesktopShortcut
     public string Id { get; set; } = "";
     public string Title { get; set; } = "";
     public string AppId { get; set; } = "";
-    public double X { get; set; }
-    public double Y { get; set; }
-    public string ColorHex { get; set; } = "#2563EB";
+    public double PositionX { get; set; } = -1;
+    public double PositionY { get; set; } = -1;
+    public double X { get => PositionX; set => PositionX = value; }
+    public double Y { get => PositionY; set => PositionY = value; }
+    public string ColorHex { get; set; } = "#3B82F6";
 }
 
 internal sealed class DesktopSettings
 {
-    public string Wallpaper { get; set; } = "SurgeNavy";
+    public string WallpaperId { get; set; } = "navy-aurora";
+    public string Wallpaper { get => WallpaperId; set => WallpaperId = value; }
     public string CustomWallpaperPath { get; set; } = "";
-    public string AccentColorHex { get; set; } = "#2563EB";
+    public string AccentColor { get; set; } = "#3B82F6";
+    public string AccentColorHex { get => AccentColor; set => AccentColor = value; }
     public bool Use24HourClock { get; set; } = false;
-    public ShortcutSize IconSize { get; set; } = ShortcutSize.Medium;
-    public bool WindowsHelloEnabled { get; set; } = true;
+    public int DesktopIconSize { get; set; } = 48;
+    public ShortcutSize IconSize { get => (ShortcutSize)DesktopIconSize; set => DesktopIconSize = (int)value; }
+    public bool EnableBiometrics { get; set; } = true;
+    public bool WindowsHelloEnabled { get => EnableBiometrics; set => EnableBiometrics = value; }
     public List<string> PinnedApps { get; set; } = ["browser", "files", "notes", "downloads", "vault", "vpn", "settings"];
     public List<DesktopShortcut> Shortcuts { get; set; } = [];
 
     public static DesktopSettings Load(PathManager paths)
     {
-        string file = Path.Combine(paths.Data, "Settings", "desktop.json");
+        string file = Path.Combine(paths.SettingsDir, "desktop.json");
         try
         {
             if (File.Exists(file))
             {
                 string json = File.ReadAllText(file);
                 var loaded = JsonSerializer.Deserialize<DesktopSettings>(json);
-                if (loaded is not null) return loaded;
+                if (loaded is not null && loaded.Shortcuts.Count > 0) return loaded;
             }
         }
         catch { }
@@ -54,9 +61,8 @@ internal sealed class DesktopSettings
     {
         try
         {
-            string dir = Path.Combine(paths.Data, "Settings");
-            Directory.CreateDirectory(dir);
-            string file = Path.Combine(dir, "desktop.json");
+            Directory.CreateDirectory(paths.SettingsDir);
+            string file = Path.Combine(paths.SettingsDir, "desktop.json");
             File.WriteAllText(file, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch { }
@@ -68,13 +74,13 @@ internal sealed class DesktopSettings
         {
             Shortcuts =
             [
-                new DesktopShortcut { Id = "s-browser", Title = "Surge Browser", AppId = "browser", X = 20, Y = 20, ColorHex = "#3B82F6" },
-                new DesktopShortcut { Id = "s-files", Title = "My Files", AppId = "files", X = 20, Y = 115, ColorHex = "#0EA5E9" },
-                new DesktopShortcut { Id = "s-notes", Title = "Notes", AppId = "notes", X = 20, Y = 210, ColorHex = "#10B981" },
-                new DesktopShortcut { Id = "s-downloads", Title = "Downloads", AppId = "downloads", X = 20, Y = 305, ColorHex = "#6366F1" },
-                new DesktopShortcut { Id = "s-vault", Title = "Password Vault", AppId = "vault", X = 20, Y = 400, ColorHex = "#F59E0B" },
-                new DesktopShortcut { Id = "s-vpn", Title = "Browser Proxy", AppId = "vpn", X = 20, Y = 495, ColorHex = "#8B5CF6" },
-                new DesktopShortcut { Id = "s-settings", Title = "Settings", AppId = "settings", X = 20, Y = 590, ColorHex = "#64748B" },
+                new DesktopShortcut { Id = "browser", Title = "Surge Browser", AppId = "browser", PositionX = -1, PositionY = -1, ColorHex = "#3B82F6" },
+                new DesktopShortcut { Id = "files", Title = "My Files", AppId = "files", PositionX = -1, PositionY = -1, ColorHex = "#0EA5E9" },
+                new DesktopShortcut { Id = "notes", Title = "Notes", AppId = "notes", PositionX = -1, PositionY = -1, ColorHex = "#10B981" },
+                new DesktopShortcut { Id = "downloads", Title = "Downloads", AppId = "downloads", PositionX = -1, PositionY = -1, ColorHex = "#6366F1" },
+                new DesktopShortcut { Id = "vault", Title = "Password Vault", AppId = "vault", PositionX = -1, PositionY = -1, ColorHex = "#F59E0B" },
+                new DesktopShortcut { Id = "vpn", Title = "VPN & Proxy", AppId = "vpn", PositionX = -1, PositionY = -1, ColorHex = "#8B5CF6" },
+                new DesktopShortcut { Id = "settings", Title = "Settings", AppId = "settings", PositionX = -1, PositionY = -1, ColorHex = "#64748B" },
             ]
         };
     }
@@ -91,21 +97,23 @@ internal sealed class NotificationItem
 
 internal static class DeskColors
 {
-    public static readonly Color NavyDark = Color.FromRgb(8, 13, 26);
-    public static readonly Color NavySurface = Color.FromRgb(14, 23, 46);
-    public static readonly Color NavyCard = Color.FromRgb(20, 32, 60);
-    public static readonly Color AccentBlue = Color.FromRgb(37, 99, 235);
-    public static readonly Color AccentCyan = Color.FromRgb(6, 182, 212);
-    public static readonly Color TaskbarBackground = Color.FromArgb(235, 11, 18, 36);
-    public static readonly Color BorderSubtle = Color.FromArgb(50, 255, 255, 255);
-    public static readonly Color BorderStrong = Color.FromArgb(90, 255, 255, 255);
-    public static readonly Color TextPrimary = Color.FromRgb(248, 250, 252);
-    public static readonly Color TextSecondary = Color.FromRgb(148, 163, 184);
-
-    public static SolidColorBrush Brush(Color c)
+    private static SolidColorBrush B(byte r, byte g, byte b, byte a = 255)
     {
-        var b = new SolidColorBrush(c);
-        b.Freeze();
-        return b;
+        var brush = new SolidColorBrush(Color.FromArgb(a, r, g, b));
+        brush.Freeze();
+        return brush;
     }
+
+    public static readonly SolidColorBrush NavyDark = B(8, 13, 26);
+    public static readonly SolidColorBrush NavySurface = B(14, 23, 46);
+    public static readonly SolidColorBrush NavySurfaceHover = B(26, 40, 75);
+    public static readonly SolidColorBrush NavyCard = B(20, 32, 60);
+    public static readonly SolidColorBrush NavyBorder = B(30, 48, 88);
+    public static readonly SolidColorBrush AccentBlue = B(37, 99, 235);
+    public static readonly SolidColorBrush CyanGlow = B(6, 182, 212);
+    public static readonly SolidColorBrush TextPrimary = B(248, 250, 252);
+    public static readonly SolidColorBrush TextMuted = B(148, 163, 184);
+    public static readonly SolidColorBrush AmberWarning = B(245, 158, 11);
+    public static readonly SolidColorBrush EmeraldSuccess = B(16, 185, 129);
+    public static readonly SolidColorBrush DangerRed = B(239, 68, 68);
 }

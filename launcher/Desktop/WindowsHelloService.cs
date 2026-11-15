@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -13,7 +14,6 @@ internal static class WindowsHelloService
         if (isAvailableCache.HasValue) return isAvailableCache.Value;
         try
         {
-            // Windows 10/11 platform verification check
             isAvailableCache = Environment.OSVersion.Version.Major >= 10;
         }
         catch
@@ -48,5 +48,31 @@ internal static class WindowsHelloService
         {
             return null;
         }
+    }
+
+    public static void ProtectPassword(PathManager paths, string password)
+    {
+        try
+        {
+            Directory.CreateDirectory(paths.SettingsDir);
+            byte[] enc = ProtectPassword(password);
+            File.WriteAllBytes(Path.Combine(paths.SettingsDir, "hello.bin"), enc);
+        }
+        catch { }
+    }
+
+    public static string? UnprotectPassword(PathManager paths)
+    {
+        try
+        {
+            string file = Path.Combine(paths.SettingsDir, "hello.bin");
+            if (File.Exists(file))
+            {
+                byte[] enc = File.ReadAllBytes(file);
+                return UnprotectPassword(enc);
+            }
+        }
+        catch { }
+        return null;
     }
 }

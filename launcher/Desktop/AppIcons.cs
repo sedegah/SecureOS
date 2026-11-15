@@ -44,6 +44,10 @@ internal static class AppIcons
     public static Geometry Forward => Get("forward", "M12,4 L10.59,5.41 L16.17,11 L4,11 L4,13 L16.17,13 L10.59,18.59 L12,20 L20,12 Z");
     public static Geometry Refresh => Get("refresh", "M17.65,6.35 C16.2,4.9 14.21,4 12,4 C7.58,4 4.01,7.58 4.01,12 C4.01,16.42 7.58,20 12,20 C15.73,20 18.84,17.45 19.73,14 L17.65,14 C16.83,16.33 14.61,18 12,18 C8.69,18 6,15.31 6,12 C6,8.69 8.69,6 12,6 C13.66,6 15.14,6.69 16.22,7.78 L13,11 L20,11 L20,4 L17.65,6.35 Z");
     public static Geometry Home => Get("home", "M10,20 L10,14 L14,14 L14,20 L19,20 L19,12 L22,12 L12,3 L2,12 L5,12 L5,20 Z");
+    public static Geometry NavBack => Back;
+    public static Geometry NavForward => Forward;
+    public static Geometry NavRefresh => Refresh;
+    public static Geometry NavHome => Home;
     public static Geometry Add => Get("add", "M19,13 L13,13 L13,19 L11,19 L11,13 L5,13 L5,11 L11,11 L11,5 L13,5 L13,11 L19,11 Z");
     public static Geometry Trash => Get("trash", "M6,19 C6,20.1 6.9,21 8,21 L16,21 C17.1,21 18,20.1 18,19 L18,7 L6,7 L6,19 Z M19,4 L15.5,4 L14.5,3 L9.5,3 L8.5,4 L5,4 L5,6 L19,6 L19,4 Z");
     public static Geometry Copy => Get("copy", "M16,1 L4,1 C2.9,1 2,1.9 2,3 L2,17 L4,17 L4,3 L16,3 L16,1 Z M19,5 L8,5 C6.9,5 6,5.9 6,7 L6,21 C6,22.1 6.9,23 8,23 L19,23 C20.1,23 21,22.1 21,21 L21,7 C21,5.9 20.1,5 19,5 Z M19,21 L8,21 L8,7 L19,7 L19,21 Z");

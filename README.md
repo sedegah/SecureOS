@@ -58,6 +58,18 @@ to hide what you do.
 - [Security notes](docs/SECURITY.md) — how your data is protected, and the limits of that
 - [Technical notes](docs/README.md) — building a drive from source
 
+![alt text](image.png)
+
+## Release Policy
+
+Surge is released under a "stable-only" policy: only fully tested, production-ready builds are published. 
+* No "beta", "release candidate", or "preview" builds are distributed.  
+* All builds are signed with a release key and available for download from the official GitHub releases page.  
+* Automated GitHub Actions run a full CI pipeline including security scanning, build tests, and integration tests for every commit.  
+* Manual QA verification is performed before any release.  
+* Each release includes official release notes and documentation.  
+* The primary release channels are the [GitHub Releases page](https://github.com/kimatkumar00/Surge/releases) and, optionally, a portable `.exe` or `.dmg` installer distributed directly to users.
+
 ## Not included
 
 By design, Surge has no cloud sync, email client, AI assistant, app store, or VPN. It is a

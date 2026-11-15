@@ -14,7 +14,7 @@ namespace SurgePortable.Desktop;
 /// Hosts the desktop workspace canvas, draggable shortcuts, internal window manager,
 /// taskbar, start menu, calendar, and system tray.
 /// </summary>
-public sealed class DesktopWindow : Window
+internal sealed class DesktopWindow : Window
 {
     private readonly PathManager paths;
     private readonly LocalHelper helper;
@@ -103,7 +103,6 @@ public sealed class DesktopWindow : Window
             Foreground = DeskColors.TextPrimary,
             FontSize = 18,
             FontWeight = FontWeights.Bold,
-            LetterSpacing = 3,
             HorizontalAlignment = HorizontalAlignment.Right,
             Margin = new Thickness(0, 4, 0, 0)
         };
@@ -223,13 +222,13 @@ public sealed class DesktopWindow : Window
         vpnTrayIcon = new System.Windows.Shapes.Path
         {
             Data = AppIcons.Vpn,
-            Fill = helper.Policy.Enabled ? DeskColors.CyanGlow : DeskColors.TextMuted,
+            Fill = helper.Policy.ProtectionActive ? DeskColors.CyanGlow : DeskColors.TextMuted,
             Width = 15,
             Height = 15,
             Stretch = Stretch.Uniform,
             Margin = new Thickness(5, 0, 5, 0),
             Cursor = Cursors.Hand,
-            ToolTip = helper.Policy.Enabled ? "VPN Active" : "VPN Disconnected"
+            ToolTip = helper.Policy.ProtectionActive ? "VPN Active" : "VPN Disconnected"
         };
         vpnTrayIcon.MouseDown += (_, _) => LaunchOrActivateApp("vpn");
         trayStack.Children.Add(vpnTrayIcon);
@@ -311,7 +310,7 @@ public sealed class DesktopWindow : Window
         rootGrid.Children.Add(taskbar);
 
         // --- 4. FLYOUTS LAYER (Floated above Desktop) ---
-        startMenu = new StartMenuFlyout(paths, LaunchOrActivateApp, LockSession, Close)
+        startMenu = new StartMenuFlyout(paths, appId => LaunchOrActivateApp(appId), LockSession, Close)
         {
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Bottom,

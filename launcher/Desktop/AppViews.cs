@@ -1210,8 +1210,8 @@ internal sealed class VpnAppView : Grid
 
         statusBlock = new TextBlock
         {
-            Text = helper.Policy.Enabled ? "Status: Connected (Protected)" : "Status: Disconnected (Direct Connection)",
-            Foreground = helper.Policy.Enabled ? DeskColors.CyanGlow : DeskColors.TextMuted,
+            Text = helper.Policy.ProtectionActive ? "Status: Connected (Protected)" : "Status: Disconnected (Direct Connection)",
+            Foreground = helper.Policy.ProtectionActive ? DeskColors.CyanGlow : DeskColors.TextMuted,
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -1222,7 +1222,7 @@ internal sealed class VpnAppView : Grid
         {
             Content = "Enable Proxy",
             Foreground = DeskColors.TextPrimary,
-            IsChecked = helper.Policy.Enabled,
+            IsChecked = helper.Policy.ProtectionRequested,
             VerticalAlignment = VerticalAlignment.Center
         };
         enableVpnCheck.Checked += (_, _) => UpdateStatus();
@@ -1244,7 +1244,8 @@ internal sealed class VpnAppView : Grid
         };
         protoCombo.Items.Add("SOCKS5 (Recommended)");
         protoCombo.Items.Add("HTTPS Proxy");
-        protoCombo.SelectedIndex = helper.Policy.Type == ProxyType.Http ? 1 : 0;
+        string currentScheme = helper.Policy.Server?.Scheme ?? "socks5";
+        protoCombo.SelectedIndex = currentScheme.Equals("https", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         stack.Children.Add(protoCombo);
 
         // Host & Port
@@ -1257,7 +1258,7 @@ internal sealed class VpnAppView : Grid
         hostStack.Children.Add(new TextBlock { Text = "Server Host / IP", Foreground = DeskColors.TextMuted, FontSize = 12, Margin = new Thickness(0, 0, 0, 4) });
         hostBox = new TextBox
         {
-            Text = helper.Policy.Host,
+            Text = helper.Policy.Server?.Host ?? "127.0.0.1",
             Background = DeskColors.NavySurface,
             Foreground = DeskColors.TextPrimary,
             BorderBrush = DeskColors.NavyBorder,
@@ -1271,7 +1272,7 @@ internal sealed class VpnAppView : Grid
         portStack.Children.Add(new TextBlock { Text = "Port", Foreground = DeskColors.TextMuted, FontSize = 12, Margin = new Thickness(0, 0, 0, 4) });
         portBox = new TextBox
         {
-            Text = helper.Policy.Port.ToString(),
+            Text = (helper.Policy.Server?.Port ?? 1080).ToString(),
             Background = DeskColors.NavySurface,
             Foreground = DeskColors.TextPrimary,
             BorderBrush = DeskColors.NavyBorder,
@@ -1323,16 +1324,32 @@ internal sealed class VpnAppView : Grid
         int.TryParse(portBox.Text, out int port);
         if (port <= 0 || port > 65535) port = 1080;
 
-        var type = protoCombo.SelectedIndex == 1 ? ProxyType.Http : ProxyType.Socks5;
-        var newPolicy = new BrowserPolicy(
-            Enabled: enableVpnCheck.IsChecked == true,
-            Type: type,
-            Host: string.IsNullOrWhiteSpace(hostBox.Text) ? "127.0.0.1" : hostBox.Text.Trim(),
-            Port: port,
-            FailClosed: killSwitchCheck.IsChecked == true,
-            VerifyOrigin: "https://ip.me");
+        string scheme = protoCombo.SelectedIndex == 1 ? "https" : "socks5";
+        string host = string.IsNullOrWhiteSpace(hostBox.Text) ? "127.0.0.1" : hostBox.Text.Trim();
+        string serverId = "srv-" + Guid.NewGuid().ToString("N")[..8];
 
-        newPolicy.Save(new DocumentStore(paths));
+        var srvObj = new JsonObject
+        {
+            ["id"] = serverId,
+            ["name"] = "Default Proxy",
+            ["scheme"] = scheme,
+            ["host"] = host,
+            ["port"] = port
+        };
+
+        var vpnDoc = new JsonObject
+        {
+            ["version"] = 1,
+            ["enabled"] = enableVpnCheck.IsChecked == true,
+            ["serverId"] = serverId,
+            ["autoConnect"] = enableVpnCheck.IsChecked == true,
+            ["failClosed"] = killSwitchCheck.IsChecked == true,
+            ["verifyUrl"] = "https://api.ipify.org?format=json",
+            ["servers"] = new JsonArray(srvObj)
+        };
+
+        var documents = new DocumentStore(paths);
+        documents.Write("vpn", System.Text.Encoding.UTF8.GetBytes(vpnDoc.ToJsonString()));
         helper.RequestRestart();
         MessageBox.Show("VPN / Proxy settings saved successfully!", "Surge VPN", MessageBoxButton.OK, MessageBoxImage.Information);
     }
