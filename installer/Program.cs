@@ -25,7 +25,51 @@ internal static class Program
             return;
         }
 
-        Application.Run(new InstallerWizard());
+        string? updateDirectory = null;
+        int waitPid = 0;
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--update-directory" && i + 1 < args.Length)
+                updateDirectory = args[++i];
+            else if (args[i] == "--wait-pid" && i + 1 < args.Length &&
+                     !int.TryParse(args[++i], out waitPid))
+            {
+                MessageBox.Show("Invalid update process identifier.", "Surge Setup",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+        }
+
+        if (updateDirectory is not null)
+        {
+            updateDirectory = Path.GetFullPath(updateDirectory);
+            if (!Directory.Exists(updateDirectory) ||
+                !File.Exists(Path.Combine(updateDirectory, "Surge.exe")) ||
+                !File.Exists(Path.Combine(updateDirectory, "installed.flag")))
+            {
+                MessageBox.Show("The selected folder is not an existing installed Surge application.",
+                    "Surge Setup", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            if (waitPid > 0)
+            {
+                try
+                {
+                    using var runningApp = Process.GetProcessById(waitPid);
+                    if (!runningApp.WaitForExit(120000))
+                    {
+                        MessageBox.Show("Surge did not close in time. Close Surge and run the update again.",
+                            "Surge Setup", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                }
+                catch (ArgumentException) { }
+                catch (InvalidOperationException) { }
+            }
+        }
+
+        Application.Run(new InstallerWizard(updateDirectory));
     }
 
     private static void RunUninstall()
@@ -581,7 +625,7 @@ internal sealed class InstallerWizard : Form
         {
             using var key = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\Surge");
             key.SetValue("DisplayName", "Surge Workspace & Browser");
-            key.SetValue("DisplayVersion", "1.0.0");
+            key.SetValue("DisplayVersion", Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0");
             key.SetValue("Publisher", "Surge");
             string iconFile = Path.Combine(installDir, "assets", "icon.ico");
             key.SetValue("DisplayIcon", File.Exists(iconFile) ? iconFile : (Path.Combine(installDir, "Surge.exe") + ",0"));
