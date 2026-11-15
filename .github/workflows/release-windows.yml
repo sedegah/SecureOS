@@ -52,6 +52,9 @@ jobs:
           echo "SURGE_TAG=$TAG" >> "$GITHUB_ENV"
           echo "SURGE_VERSION=$VERSION" >> "$GITHUB_ENV"
 
+      - name: Stamp Electron version from the release tag
+        run: npm version "${{ env.SURGE_VERSION }}" --no-git-tag-version --allow-same-version --prefix desktop
+
       - name: Install desktop build dependencies
         run: npm ci --prefix desktop
 
