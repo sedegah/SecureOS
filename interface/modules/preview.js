@@ -39,9 +39,10 @@ export function showPreview({ title, blob, ext = null, size = null, onDownload =
 
   let bodyContent;
   if (fileExt === 'pdf') {
-    bodyContent = h('iframe', {
+    bodyContent = h('embed', {
       class: 'preview-frame',
-      src: `${objectUrl}#toolbar=1`,
+      type: 'application/pdf',
+      src: `${objectUrl}#toolbar=1&navpanes=1`,
       title,
     });
   } else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(fileExt)) {

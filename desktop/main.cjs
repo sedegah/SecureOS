@@ -411,7 +411,7 @@ else {
     workspace = new BrowserWindow({ title: 'Surge Workspace', width: 1280, height: 850, minWidth: 760, minHeight: 520, backgroundColor: '#f0f0f0', autoHideMenuBar: true,
       show: false,
       icon: appIcon,
-      webPreferences: { preload: path.join(__dirname, 'workspace-preload.cjs'), partition: 'surge-workspace', sandbox: true, contextIsolation: true, nodeIntegration: false } });
+      webPreferences: { preload: path.join(__dirname, 'workspace-preload.cjs'), partition: 'surge-workspace', sandbox: true, contextIsolation: true, nodeIntegration: false, plugins: true } });
     workspace.removeMenu();
     const ALLOWED_WORKSPACE_PERMISSIONS = new Set(['clipboard-sanitized-write', 'publickey-credentials-get', 'publickey-credentials-create']);
     workspace.webContents.session.setPermissionRequestHandler((contents, permission, callback) => callback(contents === workspace?.webContents && ALLOWED_WORKSPACE_PERMISSIONS.has(permission)));
