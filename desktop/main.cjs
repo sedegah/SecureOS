@@ -265,25 +265,9 @@ async function checkForInstalledUpdate() {
     });
     child.unref();
     app.quit();
-  } catch (error) {
-    if (!quitting && workspace && !workspace.isDestroyed()) {
-      const choice = await dialog.showMessageBox(workspace, {
-        type: 'warning',
-        title: 'Could not check for Surge updates',
-        message: 'Surge could not complete its update check.',
-        detail: error.message,
-        buttons: ['OK', 'Open releases'],
-        defaultId: 0,
-        cancelId: 0,
-        noLink: true,
-      });
-      if (choice.response === 1) {
-        const { shell } = require('electron');
-        await shell.openExternal('https://github.com/sedegah/SurgeOS/releases');
-      }
-    }
+  } catch {
+    // Update checks are best-effort; network failures must not interrupt startup.
   }
-}
 
 function installDownloads() {
   browserSession.on('will-download', (_event, item) => {
