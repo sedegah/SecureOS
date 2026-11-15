@@ -96,6 +96,19 @@ export const api = {
   transfer: (path, destination, move) => request('POST', '/api/files/transfer', { path, destination, move, confirm: true }),
   open: (path) => request('POST', '/api/files/open', { path }),
   reveal: (path) => request('POST', '/api/files/reveal', { path }),
+  readFileBlob: async (path) => {
+    const response = await fetch(`/api/files/raw?path=${encodeURIComponent(path ?? '')}`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        'X-Surge-Token': token ?? '',
+      },
+    });
+    if (!response.ok) {
+      throw new ApiError(response.status, 'file-error', 'Could not load file preview.');
+    }
+    return await response.blob();
+  },
 };
 
 export function joinPath(parent, name) {

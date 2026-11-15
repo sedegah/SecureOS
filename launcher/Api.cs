@@ -14,6 +14,9 @@ internal sealed record ApiResponse(int Status, string ContentType, byte[] Body, 
 
     public static ApiResponse Raw(int status, byte[] body, string? sourceHeader = null) =>
         new(status, "application/json; charset=utf-8", body, sourceHeader);
+
+    public static ApiResponse File(int status, byte[] body, string contentType) =>
+        new(status, contentType, body, null);
 }
 
 internal interface IBrowserControl
@@ -83,6 +86,31 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
             {
                 string dir = ResolveOrdinaryPath(QueryValue(query, "path"), allowRoot: true);
                 return ApiResponse.Json(200, files.List(dir));
+            }
+
+            if (path == "/api/files/raw" && method == "GET")
+            {
+                string filePath = ResolveOrdinaryPath(QueryValue(query, "path"));
+                if (!System.IO.File.Exists(filePath))
+                    return ApiResponse.Error(404, "not-found", "File not found.");
+
+                byte[] bytes = System.IO.File.ReadAllBytes(filePath);
+                string ext = Path.GetExtension(filePath).ToLowerInvariant();
+                string contentType = ext switch
+                {
+                    ".pdf" => "application/pdf",
+                    ".png" => "image/png",
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".gif" => "image/gif",
+                    ".webp" => "image/webp",
+                    ".svg" => "image/svg+xml",
+                    ".bmp" => "image/bmp",
+                    ".ico" => "image/x-icon",
+                    ".txt" or ".log" => "text/plain; charset=utf-8",
+                    ".json" => "application/json; charset=utf-8",
+                    _ => "application/octet-stream"
+                };
+                return ApiResponse.File(200, bytes, contentType);
             }
 
             if (path == "/api/biometric/status" && method == "GET")
