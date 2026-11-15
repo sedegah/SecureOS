@@ -87,7 +87,7 @@ It is **not** a way to browse invisibly. The computer, its antivirus software, a
 
 ## Release Policy
 
-Only fully tested, production-ready builds are published. No betas or previews. Each release includes official release notes and is available on the [GitHub Releases page](https://github.com/kimatkumar00/Surge/releases).
+Only fully tested, production-ready builds are published. No betas or previews. Each release includes official release notes and is available on the [GitHub Releases page](https://github.com/sedegah/SurgeOS/releases).
 
 ---
 
