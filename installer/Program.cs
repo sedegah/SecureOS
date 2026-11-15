@@ -41,7 +41,7 @@ internal static class Program
 
         try
         {
-            // Remove shortcuts
+
             string desktopShortcut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Surge.lnk");
             if (File.Exists(desktopShortcut)) File.Delete(desktopShortcut);
 
@@ -49,13 +49,11 @@ internal static class Program
             string startShortcut = Path.Combine(startMenuDir, "Surge.lnk");
             if (File.Exists(startShortcut)) File.Delete(startShortcut);
 
-            // Remove registry
             using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall", writable: true))
             {
                 key?.DeleteSubKeyTree("Surge", throwOnMissingSubKey: false);
             }
 
-            // Self-delete batch
             string appDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
             string batchPath = Path.Combine(Path.GetTempPath(), "surge_uninst_" + Guid.NewGuid().ToString("N") + ".bat");
             string batchContent = $@"@echo off
@@ -94,21 +92,17 @@ internal sealed class InstallerWizard : Form
     private Image? bannerImage;
     private Icon? appIcon;
 
-    // Controls for Step 1: Destination
     private readonly TextBox txtPath = new();
     private readonly Button btnBrowse = new();
     private readonly Label lblSpace = new();
 
-    // Controls for Step 2: Options
     private readonly CheckBox chkDesktop = new();
     private readonly CheckBox chkStartMenu = new();
     private readonly CheckBox chkPortable = new();
 
-    // Controls for Step 3: Progress
     private readonly ProgressBar progressBar = new();
     private readonly Label lblStatus = new();
 
-    // Controls for Step 4: Finish
     private readonly CheckBox chkLaunch = new();
 
     private string TargetDirectory => txtPath.Text.Trim();
@@ -146,7 +140,7 @@ internal sealed class InstallerWizard : Form
 
     private void BuildLayout()
     {
-        // Header Banner
+
         headerPanel.Dock = DockStyle.Top;
         headerPanel.Height = 140;
         headerPanel.BackColor = Color.FromArgb(8, 13, 26);
@@ -155,7 +149,7 @@ internal sealed class InstallerWizard : Form
             if (bannerImage != null)
             {
                 e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                // Center-crop or fit banner
+
                 float ratio = Math.Max((float)headerPanel.Width / bannerImage.Width, (float)headerPanel.Height / bannerImage.Height);
                 int w = (int)(bannerImage.Width * ratio);
                 int h = (int)(bannerImage.Height * ratio);
@@ -165,7 +159,6 @@ internal sealed class InstallerWizard : Form
             }
         };
 
-        // Footer
         footerPanel.Dock = DockStyle.Bottom;
         footerPanel.Height = 60;
         footerPanel.BackColor = Color.FromArgb(238, 240, 244);
@@ -195,12 +188,9 @@ internal sealed class InstallerWizard : Form
 
         footerPanel.Controls.AddRange([btnBack, btnNext, btnCancel]);
 
-        // Content
         contentPanel.Dock = DockStyle.Fill;
         contentPanel.Padding = new Padding(30, 20, 30, 20);
 
-        // WinForms docks controls in reverse z-order (last added = highest z = docked first).
-        // Footer (Bottom) must dock first, then Header (Top), then Content (Fill) gets the remainder.
         SuspendLayout();
         Controls.Add(contentPanel);
         Controls.Add(headerPanel);
@@ -529,7 +519,6 @@ internal sealed class InstallerWizard : Form
                 });
             }
 
-            // Copy setup itself as Uninstaller
             string currentExe = Environment.ProcessPath ?? "";
             if (File.Exists(currentExe))
             {
@@ -543,13 +532,12 @@ internal sealed class InstallerWizard : Form
             else
             {
                 File.WriteAllText(Path.Combine(target, "installed.flag"), "1");
-                // Register in Windows Add/Remove Programs
+
                 RegisterUninstaller(target);
             }
 
             string exePath = Path.Combine(target, "Surge.exe");
 
-            // Create Shortcuts
             if (chkDesktop.Checked)
             {
                 string desktopPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Surge.lnk");
@@ -577,7 +565,11 @@ internal sealed class InstallerWizard : Form
             shortcut.TargetPath = targetPath;
             shortcut.WorkingDirectory = workingDir;
             shortcut.Description = description;
-            shortcut.IconLocation = targetPath + ",0";
+            string iconFile = Path.Combine(workingDir, "assets", "icon.ico");
+            if (File.Exists(iconFile))
+                shortcut.IconLocation = iconFile + ",0";
+            else
+                shortcut.IconLocation = targetPath + ",0";
             shortcut.Save();
         }
         catch { }
@@ -591,7 +583,8 @@ internal sealed class InstallerWizard : Form
             key.SetValue("DisplayName", "Surge Workspace & Browser");
             key.SetValue("DisplayVersion", "1.0.0");
             key.SetValue("Publisher", "Surge");
-            key.SetValue("DisplayIcon", Path.Combine(installDir, "Surge.exe") + ",0");
+            string iconFile = Path.Combine(installDir, "assets", "icon.ico");
+            key.SetValue("DisplayIcon", File.Exists(iconFile) ? iconFile : (Path.Combine(installDir, "Surge.exe") + ",0"));
             key.SetValue("InstallLocation", installDir);
             key.SetValue("UninstallString", $"\"{Path.Combine(installDir, "Uninstall.exe")}\" --uninstall");
             key.SetValue("QuietUninstallString", $"\"{Path.Combine(installDir, "Uninstall.exe")}\" --uninstall");
@@ -602,3 +595,4 @@ internal sealed class InstallerWizard : Form
         catch { }
     }
 }
+

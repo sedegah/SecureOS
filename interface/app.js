@@ -8,7 +8,6 @@ import * as downloads from './modules/downloads.js';
 import * as passwords from './modules/passwords.js';
 import * as vpn from './modules/vpn.js';
 
-// Ensure origin is always localhost rather than an IP, as WebAuthn strictly disallows IP addresses for relying party IDs.
 if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
   const target = new URL(window.location.href);
   target.hostname = 'localhost';

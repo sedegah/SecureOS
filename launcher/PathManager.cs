@@ -10,7 +10,6 @@ internal sealed record StorageInfo(long TotalBytes, long FreeBytes)
     public bool CriticalSpace => FreeBytes < 500_000_000L;
 }
 
-/// Every path is derived from the executable location at runtime, never from a fixed drive letter.
 internal sealed class PathManager
 {
     public const long MaxDocumentBytes = 32L * 1024 * 1024;
@@ -143,17 +142,16 @@ internal sealed class PathManager
 
     public bool IsProtected(string fullPath)
     {
-        // Windows also resolves names with trailing dots/spaces to the same item.
+
         string rel = string.Join('/', ToRelative(Path.GetFullPath(fullPath)).Split('/')
             .Select(part => part.TrimEnd('.', ' ')));
-        // Protect ancestors too: copying, moving or deleting Data would include the vault.
+
         return rel.Length == 0 || rel.Equals("Data", StringComparison.OrdinalIgnoreCase) ||
             ProtectedEntries.Any(p => rel.Equals(p, StringComparison.OrdinalIgnoreCase) ||
             rel.StartsWith(p + "/", StringComparison.OrdinalIgnoreCase)) ||
             (!rel.Contains('/') && Path.GetExtension(rel).ToLowerInvariant() is ".exe" or ".dll" or ".pak" or ".bin" or ".dat");
     }
 
-    /// Resolves a workspace-relative path, refusing anything that escapes the Surge USB folder.
     public bool TryResolve(string? relative, out string fullPath, out string error)
     {
         fullPath = Root;

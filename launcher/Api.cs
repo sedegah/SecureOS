@@ -22,7 +22,6 @@ internal interface IBrowserControl
     void RequestRestart();
 }
 
-/// The workspace API. The browser never touches the filesystem directly; it asks this local helper.
 internal sealed class Api(PathManager paths, DocumentStore documents, FileOperations files, IBrowserControl browser)
 {
     public const string Version = "1.0.0";
@@ -85,6 +84,12 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
                 string dir = ResolveOrdinaryPath(QueryValue(query, "path"), allowRoot: true);
                 return ApiResponse.Json(200, files.List(dir));
             }
+
+            if (path == "/api/biometric/status" && method == "GET")
+                return BiometricStatus();
+
+            if (path == "/api/biometric/verify" && method == "POST")
+                return BiometricVerify(body);
 
             if (path.StartsWith("/api/files/", StringComparison.Ordinal) && method == "POST")
                 return FileAction(path["/api/files/".Length..], body);
@@ -230,8 +235,6 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
         });
     }
 
-    /// Firefox reads proxy preferences only at startup, so applying a change restarts the
-    /// browser. The caller must confirm, and the document is rebuilt from validated fields.
     private ApiResponse VpnApply(byte[] body)
     {
         if (body.Length > PathManager.MaxDocumentBytes)

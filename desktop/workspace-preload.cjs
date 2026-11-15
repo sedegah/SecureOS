@@ -14,3 +14,4 @@ contextBridge.exposeInMainWorld('surgeDesktop', {
   biometricUnlock: () => ipcRenderer.invoke('surge:biometric-unlock'),
   biometricRemove: () => ipcRenderer.invoke('surge:biometric-remove'),
 });
+

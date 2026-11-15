@@ -236,7 +236,7 @@
     renderStatus();
     try {
       const result = await api.command(action, payload);
-      // Subscription updates can be newer than this command's response.
+
       if (startedAt === revision && isState(result)) applyState(result);
       if (request === commandSequence && result?.error) {
         commandError = errorText(result.error);
@@ -365,3 +365,4 @@
     if (typeof unsubscribe === "function") unsubscribe();
   }, { once: true });
 })();
+

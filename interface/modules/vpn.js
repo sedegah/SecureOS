@@ -24,7 +24,7 @@ export function currentState() {
 }
 
 export function isProtected() {
-  // Applying Chromium proxy settings is not independent verification.
+
   return false;
 }
 
@@ -59,7 +59,6 @@ function acceptState(next) {
   statusKnown = true;
 }
 
-// Send only editable fields, never derived status, old check results or credentials.
 function storedConfig(patch) {
   const next = { ...config, ...patch };
   return {
@@ -78,7 +77,7 @@ export async function load() {
     notify();
     return;
   }
-  // A read started during an apply must not replace the result with older state.
+
   if (pending) {
     await operations;
     return;
@@ -123,8 +122,6 @@ function apply(patch, message, disconnecting = false) {
   revision += 1;
   lastError = '';
 
-  // Serialize writes, including a disconnect requested while another apply is pending.
-  // Build its payload at execution time from the most recent applied state.
   operations = operations.then(async () => {
     try {
       if (!hasSnapshot) acceptState(await api.vpnState());
@@ -135,8 +132,7 @@ function apply(patch, message, disconnecting = false) {
       return true;
     } catch (error) {
       lastError = error?.message ?? 'Could not apply browser proxy settings.';
-      // Persistence and application can fail separately. Do not assume either an
-      // on or an off state from the requested patch, even after a rejected apply.
+
       try {
         acceptState(await api.vpnState());
       } catch {
@@ -164,7 +160,7 @@ async function connect() {
 }
 
 async function disconnect() {
-  // This remains available for blocked/unknown states and after any failed apply.
+
   await apply({ enabled: false, autoConnect: false }, 'Proxy disabled and auto-connect switched off.', true);
 }
 
@@ -342,13 +338,13 @@ function render(target) {
 }
 
 export async function mount(target) {
-  // Attach before awaiting IPC so stop() cannot be undone by a late mount result.
+
   rerender = () => render(target);
   rerender();
   await load();
 }
 
-// Leaving the panel detaches rendering only; pending session changes still finish.
 export function stop() {
   rerender = null;
 }
+

@@ -67,7 +67,6 @@ input::placeholder { color: #717171; opacity: 1; }
   border: 0;
 }
 
-/* WebContentsView begins at y=88. Keep both rows fixed, including borders. */
 .browser-chrome {
   position: fixed;
   inset: 0 0 auto;
@@ -193,3 +192,4 @@ kbd { font: inherit; }
   .tab-loading, .start-rule { background: Highlight; }
   .status { color: CanvasText; }
 }
+

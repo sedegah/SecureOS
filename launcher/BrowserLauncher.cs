@@ -5,8 +5,7 @@ namespace SurgePortable;
 
 internal static class BrowserLauncher
 {
-    /// Firefox reads user.js at startup, so runtime-resolved USB paths are written on every launch
-    /// instead of being stored as absolute paths in Surge's own settings.
+
     public static void WritePortablePreferences(PathManager paths, BrowserPolicy policy, string homepageUrl)
     {
         Directory.CreateDirectory(paths.ProfileDir);

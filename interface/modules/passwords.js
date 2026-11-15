@@ -50,7 +50,7 @@ function bindActivity() {
   activityBound = true;
   for (const event of ['pointerdown', 'keydown', 'wheel']) {
     document.addEventListener(event, (e) => {
-      // Only reset activity if user is actively interacting inside the vault container
+
       if (state === 'unlocked' && container?.isConnected && container.contains(e.target)) {
         lastActivity = Date.now();
       }
@@ -237,7 +237,7 @@ async function clearClipboard() {
   try {
     await navigator.clipboard.writeText('');
   } catch {
-    // Clipboard access can be refused by the browser; nothing sensitive is stored by Surge.
+
   }
 }
 

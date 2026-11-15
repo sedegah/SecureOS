@@ -1,6 +1,3 @@
-// Argon2id comes from the vendored hash-wasm UMD bundle loaded by index.html (globalThis.hashwasm).
-// AES-256-GCM uses the browser's own WebCrypto implementation. The master password and the derived
-// key never leave this page: only the sealed envelope is handed to the USB helper.
 
 const KDF_DEFAULTS = { algorithm: 'argon2id', memoryKiB: 65536, iterations: 3, parallelism: 1 };
 const SALT_BYTES = 16;
@@ -12,7 +9,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const MIN_MASTER_LENGTH = 12;
 export const MAX_VAULT_FILE_BYTES = 16 * 1024 * 1024;
-// Bound encrypted manifests as well as file blobs before decoding or invoking crypto.
+
 const MAX_CIPHERTEXT_BYTES = MAX_VAULT_FILE_BYTES + TAG_BYTES;
 
 export class VaultError extends Error {
@@ -23,7 +20,7 @@ export class VaultError extends Error {
 }
 
 function toBase64(bytes) {
-  // Full chunks are divisible by three, so only the final chunk has padding.
+
   const chunks = [];
   for (let i = 0; i < bytes.length; i += 0x6000) {
     chunks.push(btoa(String.fromCharCode(...bytes.subarray(i, i + 0x6000))));
@@ -37,7 +34,7 @@ function validateBase64(text, minBytes, maxBytes) {
     throw new VaultError('corrupt', 'The encrypted data has an invalid length.');
   const padding = text.endsWith('==') ? 2 : text.endsWith('=') ? 1 : 0;
   const byteLength = text.length / 4 * 3 - padding;
-  // Avoid a repeated-group regex over a potentially 22 MiB string. Check canonical pad bits too.
+
   if (byteLength < minBytes || byteLength > maxBytes
     || /[^A-Za-z0-9+/]/.test(text.slice(0, text.length - padding))
     || (padding && (BASE64_ALPHABET.indexOf(text[text.length - padding - 1]) & (padding === 2 ? 15 : 3))))
@@ -74,7 +71,7 @@ function validateVaultPayload(vault) {
   if (!Array.isArray(files))
     throw new VaultError('corrupt', 'The vault file manifest is invalid.');
   for (const file of files) {
-    // Only metadata belongs here; file bodies are separately encrypted blobs.
+
     if (!isRecord(file) || typeof file.name !== 'string'
       || !Number.isInteger(file.size) || file.size < 0 || file.size > MAX_VAULT_FILE_BYTES
       || Object.keys(file).some((field) => !['id', 'name', 'size'].includes(field)))
@@ -208,7 +205,7 @@ export async function encryptVaultFile(key, envelope, id, bytes) {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   let ciphertext;
   try {
-    // The caller owns bytes and is responsible for clearing them after use.
+
     ciphertext = await crypto.subtle.encrypt(
       {
         name: 'AES-GCM', iv, tagLength: 128,

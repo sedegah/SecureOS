@@ -32,3 +32,4 @@ function navigationTarget(value, engine = 'duckduckgo') {
 }
 
 module.exports = { webUrl, navigationTarget };
+

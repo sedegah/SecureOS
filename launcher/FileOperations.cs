@@ -8,7 +8,6 @@ internal sealed class FileOperationException(string message, int status = 400) :
     public int Status { get; } = status;
 }
 
-/// Native USB file operations. Every path is already resolved inside the Surge folder.
 internal sealed class FileOperations(PathManager paths)
 {
     private const int MaxEntries = 5000;

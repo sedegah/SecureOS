@@ -8,14 +8,10 @@ internal sealed record ProxyServer(string Id, string Name, string Scheme, string
     public string Address => $"{Host}:{Port}";
 }
 
-/// Turns the stored workspace settings and VPN document into Firefox preferences.
-/// Only a fixed set of keys is ever written, and every value is validated first, so a
-/// damaged or hostile document cannot inject arbitrary browser preferences.
 internal sealed class BrowserPolicy
 {
     public const string DefaultVerifyUrl = "https://api.ipify.org?format=json";
 
-    /// Loopback must stay direct or the workspace page could not reach its own helper.
     private const string ProxyBypass = "localhost, 127.0.0.1";
 
     public bool SurgeHomepage { get; private init; } = true;
@@ -29,8 +25,6 @@ internal sealed class BrowserPolicy
     public string? ServerId { get; private init; }
     public string? BaselineIp { get; private init; }
 
-    /// True when protection is on but unusable, so Firefox is pointed at a closed port
-    /// instead of being allowed to fall back to the direct connection.
     public bool Blocked => ProtectionRequested && Server is null && FailClosed;
 
     public bool ProtectionActive => ProtectionRequested && (Server is not null || Blocked);
@@ -72,7 +66,6 @@ internal sealed class BrowserPolicy
         yield return ("browser.startup.homepage", SurgeHomepage ? homepageUrl : "about:blank");
         yield return ("browser.startup.page", SurgeHomepage ? "1" : "0");
 
-        // WebRTC can reveal host addresses outside the proxy, so it stays off while protected.
         yield return ("media.peerconnection.enabled", ProtectionActive ? "false" : "true");
 
         if (!ProtectionActive)
@@ -86,7 +79,7 @@ internal sealed class BrowserPolicy
 
         if (Server is null)
         {
-            // Fail closed: a proxy that cannot connect blocks every request.
+
             yield return ("network.proxy.socks", "127.0.0.1");
             yield return ("network.proxy.socks_port", "1");
             yield return ("network.proxy.socks_version", "5");
@@ -110,8 +103,6 @@ internal sealed class BrowserPolicy
         }
     }
 
-    /// Firefox policies live beside the browser, not in the profile, and are the only
-    /// supported way to remove private browsing without an extension.
     public void WritePolicies(PathManager paths)
     {
         string dir = Path.Combine(paths.BrowserDir, "distribution");
@@ -192,8 +183,7 @@ internal sealed class BrowserPolicy
             return DefaultVerifyUrl;
         if (uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length > 0 || uri.IsLoopback)
             return DefaultVerifyUrl;
-        // Canonicalizing would rewrite the default address, so a second load would no longer
-        // recognise it. The validated text is kept exactly as the user supplied it.
+
         return value;
     }
 }

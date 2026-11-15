@@ -1,77 +1,96 @@
-# Surge Portable 1.0
+# Surge Workspace & Browser
 
-Your browser and your personal workspace, together on one USB drive.
+Your browser and your personal workspace, together on one USB drive — or installed on your computer.
 
-Plug the drive into a Windows 10 or Windows 11 computer, open `Surge.exe`, and Firefox
-starts with the Surge workspace as its homepage. Nothing is installed on the computer,
-no administrator rights are needed, and no account or sign-in is required.
+Plug the drive into any Windows computer, open **Surge.exe**, and you have a full workspace with a private browser, encrypted password vault, notes, file manager, and proxy protection. Nothing is installed on the computer, no admin rights are needed, and no account or sign-in is required.
 
-Unplug the drive and your notes, bookmarks, downloads and saved passwords go with you.
+Unplug the drive and everything goes with you.
 
-## What you get
+![Surge Workspace](image.png)
+![Surge Browser](image-1.png)
+
+---
+
+## What You Get
 
 | | |
 | --- | --- |
-| **Browser** | Firefox, with your history and cookies kept on the USB drive |
+| **Surge Browser** | A private browser with tabs, isolated profiles, and all your browsing data stored on your drive |
+| **Encrypted Vault** | A locked password manager and private file vault, protected by a master password you choose |
+| **Fingerprint Unlock** | Optionally unlock your vault with your fingerprint or Windows Hello (desktop install only) |
+| **Browser Proxy** | Route your browsing through your own proxy server, with an automatic kill switch if the connection drops |
 | **My Files** | Browse and organise the files on your drive |
 | **My Notes** | Write notes that save themselves, even with no internet |
-| **Bookmarks** | Save and organise your favourite sites |
 | **Downloads** | Everything you download lands on the drive, in one place |
-| **Passwords** | A locked vault, protected by a master password you choose |
-| **Settings** | Pick your theme, search engine and privacy timings |
+| **Settings** | Pick your theme, search engine, and privacy timings |
 
-The homepage works offline. You only need internet to visit websites.
+---
 
-## Getting started
+## Two Ways to Use Surge
 
-1. Plug in your Surge USB drive.
+### Portable (USB Drive)
+
+Download **SurgeOS-Portable.iso**, copy it to a USB drive, and run `Surge.exe`. Everything lives on the drive — your data, your browser, and the app itself. No installation, no registry entries, no traces left behind.
+
+### Desktop (Windows Installer)
+
+Run **Surge-Setup.exe** to install Surge on your computer. The desktop version adds fingerprint unlock, desktop and Start Menu shortcuts, and a standard uninstaller in Windows Settings.
+
+Both versions work fully offline. You only need the internet to visit websites.
+
+---
+
+## Getting Started
+
+### From a USB Drive
+
+1. Copy the contents of the ISO to a USB drive.
 2. Open the drive and double-click **Surge.exe**.
-3. Firefox opens on the Surge homepage. Start from there.
+3. Start from the home screen and navigate with the sidebar.
 
-When you are finished, close Firefox and use Windows' "Safely Remove Hardware" before
-unplugging the drive. Pulling it out while Surge is open can damage your files.
+### From the Installer
 
-## Good to know
+1. Run **Surge-Setup.exe** and follow the steps.
+2. Launch Surge from your Desktop or Start Menu.
 
-- **Your master password cannot be recovered.** Surge never stores it anywhere. If you
-  forget it, the passwords in the vault are gone for good. Write it down and keep it
-  somewhere safe.
-- **The vault locks itself** after a few minutes of inactivity, and whenever you close
-  Surge. You can also lock it yourself at any time.
+When you're finished, close Surge and safely eject the drive before unplugging.
+
+---
+
+## Good to Know
+
+- **Your master password cannot be recovered.** Surge never stores it anywhere. If you forget it, the passwords in the vault are gone for good. Write it down and keep it somewhere safe.
+- **The vault locks itself** after a few minutes of inactivity, and whenever you leave the Vault tab or close Surge. You can also lock it manually at any time.
+- **The proxy is browser-only.** It covers the Surge browser, not other apps on the computer. Surge does not bundle a proxy provider or promise anonymity.
 - **Keep some free space.** Surge warns you when the drive is running low.
-- **Surge stays on the drive.** It does not scan the rest of the computer, and it will
-  not quietly create files on the host machine.
+- **Surge stays on the drive.** In portable mode, it does not write files to the host computer.
+- **System files are hidden.** The file manager only shows your personal documents and downloads — not the files that run the app.
 
-## Privacy, honestly
+---
 
-Surge keeps your things on the USB drive rather than on the computer you borrowed. It
-does not send your notes, bookmarks or passwords anywhere, and there is no cloud sync.
+## Privacy
 
-It is **not** a way to browse invisibly. Windows, antivirus software and the websites you
-visit can still leave traces on the computer, and your internet provider can still see
-your traffic. Use a private browsing window for casual privacy, but do not rely on Surge
-to hide what you do.
+Surge keeps your things on the USB drive (or your install folder) rather than scattering them across the computer. Nothing is sent to any cloud service. There is no account, no sync, and no telemetry.
 
-## More help
+It is **not** a way to browse invisibly. The computer, its antivirus software, and the websites you visit can still leave traces, and your internet provider can still see your traffic.
 
-- [User guide](docs/USER_GUIDE.md) — day-to-day use and troubleshooting
-- [Security notes](docs/SECURITY.md) — how your data is protected, and the limits of that
-- [Technical notes](docs/README.md) — building a drive from source
+---
 
-![alt text](image.png)
-![alt text](image-1.png)
+## Requirements
+
+- Windows 10 or Windows 11
+- About 500 MB of free space
+- No admin rights needed
+- Nothing else to install — Surge is fully self-contained
+
+---
 
 ## Release Policy
 
-Surge is released under a "stable-only" policy: only fully tested, production-ready builds are published. 
-* No "beta", "release candidate", or "preview" builds are distributed.  
-* All builds are signed with a release key and available for download from the official GitHub releases page.  
-* Automated GitHub Actions run a full CI pipeline including security scanning, build tests, and integration tests for every commit.  
-* Manual QA verification is performed before any release.  
-* Each release includes official release notes and documentation.  
-* The primary release channels are the [GitHub Releases page](https://github.com/kimatkumar00/Surge/releases) and, optionally, a portable `.exe` or `.dmg` installer distributed directly to users.
+Only fully tested, production-ready builds are published. No betas or previews. Each release includes official release notes and is available on the [GitHub Releases page](https://github.com/kimatkumar00/Surge/releases).
 
-## Not included
+---
 
-By design, Surge has no cloud sync, email client, AI assistant, app store, or VPN. It is a
-portable workspace, not an operating system.
+## Not Included
+
+By design, Surge has no cloud sync, email client, AI assistant, app store, or built-in VPN. It is a portable workspace and browser, not an operating system.

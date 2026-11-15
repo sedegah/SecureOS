@@ -24,6 +24,7 @@ const { spawnSync } = require('node:child_process');
   });
   for (const output of outputs) {
     fs.cpSync(path.join(repo, 'interface'), path.join(output, 'Interface'), { recursive: true });
+    fs.cpSync(path.join(repo, 'desktop/assets'), path.join(output, 'assets'), { recursive: true });
     fs.cpSync(path.join(repo, 'LICENSES'), path.join(output, 'Licenses'), { recursive: true });
     fs.writeFileSync(path.join(output, 'README.txt'), 'SURGE\r\n\r\nOpen Surge.exe to start your workspace. Select Surge Browser to browse the web.\r\nKeep this entire folder together on your USB drive. Your data stays in Data and Downloads.\r\nClose Surge before safely ejecting the drive. Keep a separate backup of your data.\r\nThis is a Windows application, not a bootable operating-system image.\r\n');
     console.log('Standalone Surge package:', output);

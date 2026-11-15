@@ -41,7 +41,7 @@ internal static class Program
             }
             else
             {
-                // Firefox is not bundled or required: open default/system browser directly
+
                 Process.Start(new ProcessStartInfo(helper.HomepageUrl) { UseShellExecute = true });
             }
 
@@ -59,9 +59,6 @@ internal static class Program
         }
     }
 
-    /// The helper stays alive only while Firefox is open, because native USB file operations
-    /// genuinely need it. It exits with the browser and leaves nothing running when idle.
-    /// A VPN change restarts Firefox in place so the helper, its port and its token survive.
     private static void RunUntilBrowserCloses(LocalHelper helper, ref Process? browser, PathManager paths, string? browserExecutable, bool noBrowser)
     {
         DateTime? browserClosedAt = null;
@@ -97,7 +94,7 @@ internal static class Program
             }
             else if (!noBrowser)
             {
-                // When opened in system browser without a managed process, exit after 2 minutes of inactivity
+
                 if (DateTime.UtcNow.Ticks - helper.LastHeartbeatTicks > TimeSpan.FromMinutes(2).Ticks)
                     return;
             }
@@ -119,7 +116,7 @@ internal static class Program
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            // Already gone.
+
         }
         finally
         {

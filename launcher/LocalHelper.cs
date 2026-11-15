@@ -5,8 +5,6 @@ using System.Text;
 
 namespace SurgePortable;
 
-/// Minimal loopback-only HTTP server. It uses a raw socket instead of http.sys so that Surge
-/// needs no administrator rights, no URL reservation and no host installation.
 internal sealed class LocalHelper : IDisposable, IBrowserControl
 {
     private const int MaxHeaderBytes = 16 * 1024;
@@ -63,8 +61,6 @@ internal sealed class LocalHelper : IDisposable, IBrowserControl
     public bool RestartRequested => restartRequested;
     public BrowserPolicy Policy => policy;
 
-    /// Firefox only reads proxy preferences at startup, so applying a VPN change means
-    /// restarting the browser. The helper and its token survive, so the workspace reconnects.
     public void RequestRestart()
     {
         policy = BrowserPolicy.Load(documents);
@@ -125,7 +121,7 @@ internal sealed class LocalHelper : IDisposable, IBrowserControl
         }
         catch (Exception ex) when (ex is IOException or SocketException or ObjectDisposedException or OperationCanceledException)
         {
-            // A closed browser tab or an aborted request is not an application error.
+
         }
         finally
         {

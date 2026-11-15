@@ -2,7 +2,6 @@ using System.Text.Json;
 
 namespace SurgePortable;
 
-/// Stores opaque encrypted attachment envelopes, never filenames, MIME types or plaintext.
 internal sealed class VaultFileStore(PathManager paths)
 {
     public const int MaxPlaintextBytes = 16 * 1024 * 1024;
@@ -52,7 +51,7 @@ internal sealed class VaultFileStore(PathManager paths)
             throw Conflict();
 
         string directory = Resolve(DirectoryRelative);
-        // Startup creates the vault. Do not recursively recreate a missing workspace root.
+
         if (!Directory.Exists(Path.GetDirectoryName(directory)))
             throw new DirectoryNotFoundException("The vault folder is no longer available on the USB drive.");
         RequireUsb();
@@ -73,7 +72,7 @@ internal sealed class VaultFileStore(PathManager paths)
             }
 
             RequireUsb();
-            // Recheck parents after writing; never overwrite an existing attachment, even in a race.
+
             temp = Resolve(tempRelative);
             target = Resolve(relative);
             try
@@ -87,7 +86,7 @@ internal sealed class VaultFileStore(PathManager paths)
         }
         finally
         {
-            // A detached drive or changed link must not redirect cleanup to another location.
+
             try
             {
                 if (created && paths.UsbPresent && paths.TryResolve(tempRelative, out string cleanup, out _))
@@ -95,7 +94,7 @@ internal sealed class VaultFileStore(PathManager paths)
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Any remaining temporary file contains only the validated encrypted envelope.
+
             }
         }
     }
@@ -156,7 +155,7 @@ internal sealed class VaultFileStore(PathManager paths)
                 throw BadEnvelope();
 
             ValidateBase64(root.GetProperty("iv"), 12, 12);
-            // GCM appends a 16-byte tag; this bounds the possible plaintext without decrypting it.
+
             ValidateBase64(root.GetProperty("ciphertext"), 16, MaxPlaintextBytes + 16);
         }
         catch (JsonException)
@@ -192,7 +191,7 @@ internal sealed class VaultFileStore(PathManager paths)
             if (last < 0)
                 throw BadEnvelope();
         }
-        // Require standard, padded Base64 with no whitespace or nonzero unused pad bits.
+
         if ((padding == 2 && (last & 15) != 0) || (padding == 1 && (last & 3) != 0))
             throw BadEnvelope();
         int length = value.Length / 4 * 3 - padding;
@@ -205,3 +204,4 @@ internal sealed class VaultFileStore(PathManager paths)
     private static InvalidDataException BadEnvelope() =>
         new("Expected only version 1, cipher AES-256-GCM, a 12-byte Base64 IV and Base64 ciphertext including a 16-byte tag.");
 }
+

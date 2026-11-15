@@ -42,9 +42,8 @@ const server = http.createServer(async (req, res) => {
   try {
     const reqUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
-    // If root path is requested without hash / token, redirect to include the token
     if (reqUrl.pathname === '/' && !req.headers['x-surge-token']) {
-      // If browser navigating directly
+
       const accept = req.headers['accept'] || '';
       if (accept.includes('text/html') && !reqUrl.searchParams.has('k')) {
         res.writeHead(302, { Location: `/#k=${token}` });
@@ -70,7 +69,7 @@ const server = http.createServer(async (req, res) => {
       },
       (proxyRes) => {
         const respHeaders = { ...proxyRes.headers };
-        // Adjust Content-Security-Policy to allow local framing
+
         if (respHeaders['content-security-policy']) {
           respHeaders['content-security-policy'] = respHeaders['content-security-policy']
             .replace("frame-ancestors 'none'", "frame-ancestors 'self' http://localhost:3000 http://127.0.0.1:3000");

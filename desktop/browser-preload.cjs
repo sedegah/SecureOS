@@ -15,3 +15,4 @@ contextBridge.exposeInMainWorld('surgeBrowser', {
     return () => ipcRenderer.removeListener('surge:browser-state', listener);
   },
 });
+

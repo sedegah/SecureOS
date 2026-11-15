@@ -42,7 +42,6 @@ export function searchUrl(query) {
   return engine.url + encodeURIComponent(query);
 }
 
-// Turns workspace input into either a website address or a web search.
 export function resolveNavigation(input) {
   const value = input.trim();
   if (!value) return null;

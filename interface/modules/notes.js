@@ -97,7 +97,6 @@ function inline(text) {
   return fragment;
 }
 
-/// Minimal Markdown subset, built as DOM nodes so note content can never inject markup.
 export function renderMarkdown(source) {
   const root = h('div', { class: 'markdown' });
   const lines = source.replace(/\r\n/g, '\n').split('\n');
@@ -385,7 +384,6 @@ export async function mount(target) {
   render();
 }
 
-// Rejects on failure so navigation can be blocked without discarding the draft.
 export async function flushPendingSave() {
   await flushSave();
 }

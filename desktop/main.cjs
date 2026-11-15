@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, session, ipcMain, dialog, safeStorage } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, dialog, safeStorage, nativeImage } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -30,6 +30,11 @@ app.setPath('sessionData', profile);
 app.setPath('crashDumps', path.join(profile, 'CrashDumps'));
 app.commandLine.appendSwitch('disk-cache-dir', path.join(profile, 'Cache'));
 app.setName('Surge');
+app.setAppUserModelId('Surge.Workspace');
+
+const iconIco = path.join(__dirname, 'assets', 'icon.ico');
+const iconPng = path.join(__dirname, 'assets', 'icon.png');
+const appIcon = fs.existsSync(iconIco) ? nativeImage.createFromPath(iconIco) : (fs.existsSync(iconPng) ? nativeImage.createFromPath(iconPng) : undefined);
 
 let helper, homeUrl, baseUrl, token, workspace, browserWindow, browserSession;
 let appliedProxy = null;
@@ -194,9 +199,8 @@ function closeTab(id) {
 async function openBrowser(url = '') {
   if (typeof url !== 'string' || (url && !webUrl(url))) throw new Error('Only HTTP and HTTPS websites can be opened.');
   if (!browserWindow) {
-    const iconPath = path.join(__dirname, 'assets', 'icon.png');
     browserWindow = new BrowserWindow({ title: 'Surge Browser', width: 1280, height: 850, minWidth: 720, minHeight: 480, backgroundColor: '#f0f0f0', autoHideMenuBar: true,
-      icon: fs.existsSync(iconPath) ? iconPath : undefined,
+      icon: appIcon,
       webPreferences: { preload: path.join(__dirname, 'browser-preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
     browserWindow.removeMenu();
     browserWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -378,13 +382,12 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (workspace) { workspace.restore(); workspace.show(); workspace.focus(); } });
   app.whenReady().then(async () => {
-    const iconPath = path.join(__dirname, 'assets', 'icon.png');
     let splash = null;
     try {
       splash = new BrowserWindow({
         width: 640, height: 357, frame: false, transparent: true, resizable: false, center: true,
         show: true, alwaysOnTop: true, skipTaskbar: false,
-        icon: fs.existsSync(iconPath) ? iconPath : undefined,
+        icon: appIcon,
         webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }
       });
       await splash.loadFile(path.join(__dirname, 'splash.html'));
@@ -398,7 +401,7 @@ else {
     await configureProxy(await helperCall('GET', '/api/vpn/state'));
     workspace = new BrowserWindow({ title: 'Surge Workspace', width: 1280, height: 850, minWidth: 760, minHeight: 520, backgroundColor: '#f0f0f0', autoHideMenuBar: true,
       show: false,
-      icon: fs.existsSync(iconPath) ? iconPath : undefined,
+      icon: appIcon,
       webPreferences: { preload: path.join(__dirname, 'workspace-preload.cjs'), partition: 'surge-workspace', sandbox: true, contextIsolation: true, nodeIntegration: false } });
     workspace.removeMenu();
     const ALLOWED_WORKSPACE_PERMISSIONS = new Set(['clipboard-sanitized-write', 'publickey-credentials-get', 'publickey-credentials-create']);
@@ -425,3 +428,4 @@ app.on('before-quit', () => {
   quitting = true;
   if (helper && helper.exitCode === null) helper.kill();
 });
+

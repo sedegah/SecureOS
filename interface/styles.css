@@ -1,9 +1,8 @@
 :root {
-  /* Both faces ship with Windows 10 and 11, so nothing is downloaded or bundled. */
+
   --font-ui: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-mono: Consolas, "Cascadia Mono", "Courier New", monospace;
 
-  /* Windows Forms system colours: Control, Window, ControlDark, Highlight. */
   --control: #f0f0f0;
   --control-2: #e4e4e4;
   --client: #ffffff;
@@ -66,17 +65,22 @@ code { font-size: 12px; }
 }
 .skip-link:focus { left: 4px; top: 4px; }
 
-/* ---- Window chrome ---------------------------------------------------- */
-
 .app { display: flex; flex-direction: column; min-height: 100vh; }
 
 .titlebar {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 8px;
   min-height: 30px;
   padding: 0 10px;
   background: var(--text);
   border-bottom: 1px solid var(--border-hard);
   color: #fff;
+}
+.titlebar-logo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 .titlebar-name { font-size: 12px; font-weight: 600; letter-spacing: .04em; }
 .titlebar-section { font-size: 12px; color: #c3cde3; }
@@ -152,8 +156,6 @@ code { font-size: 12px; }
   color: var(--muted);
 }
 .statusbar-path { margin-left: auto; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* ---- Section headers and group boxes ---------------------------------- */
 
 .section-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
@@ -293,8 +295,6 @@ code { font-size: 12px; }
 }
 .toolbar-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-left: auto; }
 
-/* ---- Controls --------------------------------------------------------- */
-
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 24px;
@@ -373,8 +373,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .crumb[aria-current="page"]:hover { background: transparent; text-decoration: none; }
 .breadcrumb svg { color: var(--muted); }
 
-/* ---- ListView --------------------------------------------------------- */
-
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); background: var(--client); }
 .table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .table th {
@@ -402,8 +400,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .cell-url { color: var(--muted); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .table-summary { color: var(--muted); font-size: 11px; margin: 6px 2px 0; }
-
-/* ---- Notes ------------------------------------------------------------ */
 
 .notes-layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 8px; align-items: start; }
 .note-sidebar { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -449,8 +445,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .markdown code { background: var(--control); border: 1px solid var(--divider); padding: 0 3px; font-family: var(--font-mono); }
 .markdown pre code { background: transparent; border: 0; padding: 0; }
 .markdown hr { border: 0; border-top: 1px solid var(--divider); margin: 10px 0; }
-
-/* ---- Bookmarks Redesign -------------------------------------------------------- */
 
 .bookmarks-layout {
   display: grid;
@@ -547,7 +541,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
   flex-wrap: wrap;
 }
 
-/* Bookmark Toolbar */
 .bookmark-toolbar {
   display: flex;
   gap: 8px;
@@ -636,7 +629,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
   color: var(--accent);
 }
 
-/* Bookmark Grid */
 .bookmark-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -821,7 +813,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
   color: var(--danger);
 }
 
-/* List View */
 .bookmark-list-view {
   display: flex;
   flex-direction: column;
@@ -882,8 +873,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
   max-width: 200px;
 }
 
-/* ---- Forms ------------------------------------------------------------ */
-
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; min-width: 0; }
 .field-label { font-size: 12px; color: var(--text); }
@@ -895,8 +884,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .info-row:last-child { border-bottom: 0; }
 .info-label { color: var(--muted); flex: none; }
 .info-value { text-align: right; word-break: break-all; }
-
-/* ---- Vault ------------------------------------------------------------ */
 
 .vault-lock { display: flex; flex: 1; align-items: flex-start; justify-content: center; padding: 20px 0; }
 .vault-card { max-width: 440px; width: 100%; padding: 0 16px 16px; }
@@ -935,8 +922,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .strength-bar.filled.level-4 { background: var(--ok); border-color: var(--ok); }
 .strength-bar.filled.level-5 { background: var(--ok); border-color: var(--ok); }
 .strength-label { font-size: 11px; color: var(--muted); }
-
-/* ---- VPN -------------------------------------------------------------- */
 
 .vpn-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 8px; align-items: start; }
 .vpn-power { display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -1035,8 +1020,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .vpn-pill.on { color: #fff; border-color: var(--ok); background: var(--ok); }
 .vpn-pill.fault { color: #fff; border-color: var(--danger); background: var(--danger); }
 
-/* ---- Dialogs and notifications ---------------------------------------- */
-
 .dialog {
   border: 1px solid var(--border-hard);
   background: var(--control);
@@ -1077,8 +1060,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .toast-error { border-color: var(--danger); background: var(--danger-fill); color: var(--danger); }
 .toast-warn { border-color: var(--warn); background: var(--warn-fill); color: var(--warn); }
 
-/* ---- Storage meter ---------------------------------------------------- */
-
 .storage { display: flex; align-items: center; gap: 6px; }
 .storage-label { font-size: 11px; font-weight: 600; color: var(--muted); }
 .storage-track { width: 120px; height: 12px; background: var(--client); border: 1px solid var(--border-hard); overflow: hidden; }
@@ -1086,8 +1067,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
 .storage-fill.low { background: var(--warn); }
 .storage-fill.critical { background: var(--danger); }
 .storage-value { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
-
-/* ---- Responsive Adaptations for Smaller & Variable Screen Sizes ---- */
 
 @media (max-width: 1024px) {
   :root { --nav-width: 160px; }
@@ -1169,7 +1148,6 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
   }
 }
 
-/* Browser Hub Redesign */
 .browser-hub {
   display: flex;
   flex-direction: column;

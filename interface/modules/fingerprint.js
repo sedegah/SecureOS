@@ -1,6 +1,3 @@
-// Fingerprint / Biometric authentication for Surge Vault.
-// In the installed desktop app: Uses native secure storage (DPAPI / Windows Hello).
-// In standalone browser preview: Uses WebAuthn Platform Authenticator.
 
 const STORAGE_KEY = 'surge.vault.fingerprint';
 
@@ -19,7 +16,7 @@ function fromBase64(base64) {
 let sensorAvailableCache = null;
 
 export async function isFingerprintSensorAvailable() {
-  // If running inside the installed Surge desktop app, use native credential hardware
+
   if (window.surgeDesktop?.biometricIsAvailable) {
     try {
       return await window.surgeDesktop.biometricIsAvailable();
@@ -28,7 +25,6 @@ export async function isFingerprintSensorAvailable() {
     }
   }
 
-  // Standalone browser preview: check WebAuthn
   if (typeof window === 'undefined' || !window.PublicKeyCredential) return false;
   if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return false;
 
@@ -60,14 +56,12 @@ export async function enrollFingerprint(masterPassword) {
     throw new Error('Master password is required for enrollment.');
   }
 
-  // 1. Native Desktop App (no ports, no invalid domain, full Windows Hello integration)
   if (window.surgeDesktop?.biometricEnroll) {
     await window.surgeDesktop.biometricEnroll(masterPassword);
     localStorage.setItem(STORAGE_KEY, 'enrolled-desktop');
     return true;
   }
 
-  // 2. Standalone browser preview: WebAuthn
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const userId = crypto.getRandomValues(new Uint8Array(16));
 
@@ -144,12 +138,11 @@ export async function enrollFingerprint(masterPassword) {
 }
 
 export async function unlockWithFingerprint() {
-  // 1. Native Desktop App
+
   if (window.surgeDesktop?.biometricUnlock) {
     return await window.surgeDesktop.biometricUnlock();
   }
 
-  // 2. Standalone browser preview: WebAuthn
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) throw new Error('No fingerprint enrolled on this system.');
   const record = JSON.parse(raw);
@@ -208,3 +201,4 @@ export async function unlockWithFingerprint() {
 
   return new TextDecoder().decode(decryptedBytes);
 }
+

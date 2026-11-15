@@ -6,8 +6,6 @@ internal enum DocumentReadStatus { Ok, NotFound, Corrupt }
 
 internal sealed record DocumentRead(DocumentReadStatus Status, byte[] Data, bool FromBackup);
 
-/// JSON documents and the encrypted vault are written through a temporary file and replaced
-/// atomically, keeping the previous good copy as a .bak. Vault payloads are ciphertext only.
 internal sealed class DocumentStore(PathManager paths)
 {
     private static readonly string[] Allowed = ["notes", "bookmarks", "settings", "vpn", "vault"];
