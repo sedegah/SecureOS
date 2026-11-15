@@ -1,0 +1,72 @@
+name: Build and publish Surge Windows release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: surge-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows-installer:
+    if: ${{ !github.event.release.draft && !github.event.release.prerelease }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out the released source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Resolve release version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION#.}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must look like v1.2.3 or v.1.2.3"
+            exit 1
+          fi
+          echo "SURGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install Electron build dependencies
+        run: npm ci --prefix desktop
+
+      - name: Test updater logic
+        run: node --test tests/updater.test.cjs
+
+      - name: Build Electron desktop package and .NET helper
+        run: node packaging/desktop.cjs
+
+      - name: Assemble installer payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          Compress-Archive -Path "build/desktop/Surge-win32-x64/*" -DestinationPath "build/app.zip" -CompressionLevel Optimal
+
+      - name: Build self-contained Windows installer
+        run: dotnet publish installer/SurgeInstaller.csproj --configuration Release --runtime win-x64 --self-contained true -p:Version=${{ env.SURGE_VERSION }} --output build/installer
+
+      - name: Attach installer to the published GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release upload "${GITHUB_REF_NAME}" "build/installer/Surge-Setup.exe" --clobber
