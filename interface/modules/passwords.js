@@ -50,26 +50,16 @@ function clipboardSeconds() {
 function bindActivity() {
   if (activityBound) return;
   activityBound = true;
-  for (const event of ['pointerdown', 'keydown', 'wheel']) {
-    document.addEventListener(event, (e) => {
-
-      if (state === 'unlocked' && container?.isConnected && container.contains(e.target)) {
-        lastActivity = Date.now();
-      }
-    }, { passive: true, capture: true });
-  }
   lockTicker = setInterval(() => {
     if (state !== 'unlocked') return;
-    if (Date.now() - lastActivity > lockMinutes() * 60000) {
+    const ref = unlockTime || lastActivity;
+    if (Date.now() - ref > lockMinutes() * 60000) {
       lock();
       toast('Vault locked after inactivity.');
     } else if (container?.isConnected) {
       updateLockCountdown();
     }
   }, 1000);
-  bus.addEventListener('settings-changed', () => {
-    if (state === 'unlocked') lastActivity = Date.now();
-  });
 }
 
 export function lock() {
@@ -420,6 +410,7 @@ function createView() {
         vaultFiles = [];
         state = 'unlocked';
         lastActivity = Date.now();
+        unlockTime = Date.now();
         return true;
       });
       if (saved) toast('Vault created and encrypted on the USB drive.');
@@ -598,7 +589,7 @@ async function removeEntry(entry) {
 function updateLockCountdown() {
   const node = container?.querySelector('#lock-countdown');
   if (!node) return;
-  const elapsed = Date.now() - lastActivity;
+  const elapsed = Date.now() - (unlockTime || lastActivity);
   const total = lockMinutes() * 60000;
   const remaining = Math.max(0, total - elapsed);
   const seconds = Math.ceil(remaining / 1000);
@@ -876,7 +867,7 @@ export async function mount(target) {
     hasSensorChecked = true;
   }
   if (state === 'unknown') await loadVault();
-  if (state === 'unlocked' && Date.now() - lastActivity > lockMinutes() * 60000) {
+  if (state === 'unlocked' && Date.now() - (unlockTime || lastActivity) > lockMinutes() * 60000) {
     lock();
   }
   render();
