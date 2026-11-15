@@ -689,79 +689,175 @@ function unlockedView() {
     h('section', { class: 'card vault-detail', id: 'vault-detail' }));
 }
 
-function fingerprintSettingsView() {
-  if (!hasSensor) return null;
-  const enrolled = isFingerprintEnrolled();
-  return h('section', { class: 'card' },
+function securityDashboardView() {
+  const enrolled = hasSensor && isFingerprintEnrolled();
+
+  let bioAction;
+  if (!hasSensor) {
+    bioAction = h('span', { class: 'chip chip-quiet', text: 'Hardware unavailable' });
+  } else if (enrolled) {
+    bioAction = h('div', { class: 'section-actions' },
+      h('button', {
+        class: 'btn btn-small',
+        type: 'button',
+        onClick: async () => {
+          try {
+            await unlockWithFingerprint();
+            toast('Fingerprint sensor verified successfully!');
+          } catch (err) {
+            reportError(err);
+          }
+        }
+      }, icon('check', 14), 'Test sensor'),
+      h('button', {
+        class: 'btn btn-small btn-danger',
+        type: 'button',
+        onClick: () => {
+          removeFingerprintEnrollment();
+          toast('Fingerprint sensor enrollment removed.');
+          render();
+        }
+      }, 'Remove fingerprint'));
+  } else {
+    bioAction = h('button', {
+      class: 'btn btn-small btn-primary',
+      type: 'button',
+      onClick: async () => {
+        try {
+          const res = await formDialog({
+            title: 'Enroll Fingerprint Sensor',
+            message: 'Enter your master password and touch your fingerprint sensor when prompted.',
+            confirmLabel: 'Enroll Fingerprint',
+            fields: [
+              { name: 'pwd', label: 'Master password', type: 'password', required: true }
+            ]
+          });
+          if (!res?.pwd) return;
+          await enrollFingerprint(res.pwd);
+          toast('Fingerprint sensor enrolled successfully!');
+          render();
+        } catch (err) {
+          reportError(err);
+        }
+      }
+    }, icon('fingerprint', 16), 'Enroll fingerprint');
+  }
+
+  const bioCard = h('div', { class: 'card vault-sec-card' },
     h('div', { class: 'card-head' },
-      h('h2', { style: 'display: flex; align-items: center; gap: 8px;' }, icon('fingerprint', 20), 'Fingerprint sensor'),
-      enrolled
-        ? h('button', {
-            class: 'btn btn-small btn-danger',
-            type: 'button',
-            onClick: () => {
-              removeFingerprintEnrollment();
-              toast('Fingerprint sensor enrollment removed.');
-              render();
-            }
-          }, 'Remove fingerprint')
-        : h('button', {
-            class: 'btn btn-small btn-primary',
-            type: 'button',
-            onClick: async () => {
-              try {
-                const res = await formDialog({
-                  title: 'Enroll Fingerprint Sensor',
-                  message: 'Enter your master password and touch your fingerprint sensor when prompted.',
-                  confirmLabel: 'Enroll Fingerprint',
-                  fields: [
-                    { name: 'pwd', label: 'Master password', type: 'password', required: true }
-                  ]
-                });
-                if (!res?.pwd) return;
-                await enrollFingerprint(res.pwd);
-                toast('Fingerprint sensor enrolled successfully!');
-                render();
-              } catch (err) {
-                reportError(err);
-              }
-            }
-          }, icon('fingerprint', 16), 'Enroll fingerprint')),
-    h('p', { class: 'hint', text: enrolled
-      ? 'Fingerprint sensor is enrolled on this system. You can unlock your vault quickly using your fingerprint.'
-      : 'A fingerprint sensor is detected on this system. You can optionally enroll your fingerprint to unlock your vault.' }));
+      h('div', { class: 'vault-sec-card-title' },
+        icon('fingerprint', 20),
+        h('h2', { text: 'Fingerprint Sensor (Windows Hello)' }),
+        hasSensor
+          ? (enrolled ? h('span', { class: 'chip chip-ok', text: 'Enrolled' }) : h('span', { class: 'chip chip-quiet', text: 'Available' }))
+          : h('span', { class: 'chip chip-quiet', text: 'Not detected' })),
+      bioAction),
+    h('p', { class: 'vault-sec-desc', text: enrolled
+      ? 'Your fingerprint is enrolled. You can unlock your vault instantly with Windows Hello biometric verification.'
+      : hasSensor
+      ? 'A compatible fingerprint reader was detected on this PC. You can optionally enroll your fingerprint to unlock the vault without typing your master password.'
+      : 'No compatible Windows Hello fingerprint or biometric reader is available on this system.' }));
+
+  const lockCard = h('div', { class: 'card vault-sec-card' },
+    h('div', { class: 'card-head' },
+      h('div', { class: 'vault-sec-card-title' },
+        icon('clock', 20),
+        h('h2', { text: 'Inactivity Auto-Lock' }),
+        h('span', { class: 'chip chip-ok', text: `${lockMinutes()} min timeout` })),
+      h('button', {
+        class: 'btn btn-small btn-danger',
+        type: 'button',
+        onClick: () => { lock(); toast('Vault locked.'); },
+      }, icon('lock', 14), 'Lock now')),
+    h('p', { class: 'vault-sec-desc', text: `Surge automatically encrypts and locks your passwords and private files after ${lockMinutes()} minutes of inactivity. Memory is cleared immediately upon lock.` }));
+
+  const encCard = h('div', { class: 'card vault-sec-card' },
+    h('div', { class: 'card-head' },
+      h('div', { class: 'vault-sec-card-title' },
+        icon('shield', 20),
+        h('h2', { text: 'Encryption Architecture' }),
+        h('span', { class: 'chip chip-quiet', text: 'Zero Knowledge' }))),
+    h('div', { class: 'vault-sec-specs' },
+      h('div', { class: 'info-row' }, h('span', { class: 'info-label', text: 'Key Derivation' }), h('span', { class: 'info-value mono', text: 'Argon2id (64 MiB RAM, 4 iter)' })),
+      h('div', { class: 'info-row' }, h('span', { class: 'info-label', text: 'Vault Cipher' }), h('span', { class: 'info-value mono', text: 'AES-256-GCM authenticated' })),
+      h('div', { class: 'info-row' }, h('span', { class: 'info-label', text: 'Vault Storage' }), h('span', { class: 'info-value mono', text: 'Data/PasswordVault/vault.enc' })),
+      envelope?.updatedAt ? h('div', { class: 'info-row' }, h('span', { class: 'info-label', text: 'Last Saved' }), h('span', { class: 'info-value', text: formatDate(envelope.updatedAt) })) : null));
+
+  return h('div', { class: 'vault-sec-grid' }, bioCard, lockCard, encCard);
 }
 
 function render() {
   if (!container) return;
   clear(container);
   const unlocked = state === 'unlocked';
-  const view = unlocked ? unlockedView()
-    : state === 'locked' ? lockedView()
-    : state === 'busy' ? busyView()
-    : state === 'corrupt' ? corruptView()
-    : createView();
+  if (!unlocked) {
+    const view = state === 'locked' ? lockedView()
+      : state === 'busy' ? busyView()
+      : state === 'corrupt' ? corruptView()
+      : createView();
+    container.append(
+      h('header', { class: 'section-head' },
+        h('div', {},
+          h('h1', { text: 'Vault' }),
+          h('p', { class: 'section-sub', text: 'A local encrypted vault on this USB drive. No cloud, no telemetry.' })),
+        h('span', { class: 'chip chip-quiet', text: 'Locked by default' })),
+      h('div', { class: 'vault-lock' }, view));
+    if (state === 'locked') container.querySelector('#master-unlock')?.focus();
+    return;
+  }
+
+  const primaryAction = activeTab === 'passwords'
+    ? h('button', { class: 'btn btn-primary', type: 'button', onClick: () => editEntry() }, icon('plus'), 'Add entry')
+    : activeTab === 'files'
+    ? h('button', { class: 'btn btn-primary', type: 'button', disabled: fileBusy, onClick: () => container.querySelector('#vault-file-input')?.click() }, icon('plus'), 'Import files')
+    : null;
+
+  const header = h('header', { class: 'section-head' },
+    h('div', {},
+      h('h1', { text: 'Vault' }),
+      h('p', { class: 'section-sub', id: 'lock-countdown' })),
+    h('div', { class: 'section-actions' },
+      primaryAction,
+      h('button', { class: 'btn btn-danger', type: 'button', onClick: () => { lock(); toast('Vault locked.'); } }, icon('lock'), 'Lock now')));
+
+  const tabNav = h('nav', { class: 'vault-tabs', ariaLabel: 'Vault sections' },
+    h('button', {
+      class: activeTab === 'passwords' ? 'vault-tab-btn active' : 'vault-tab-btn',
+      type: 'button',
+      onClick: () => { activeTab = 'passwords'; render(); },
+    }, icon('lock', 15), 'Passwords', h('span', { class: 'vault-tab-badge', text: String(entries.length) })),
+    h('button', {
+      class: activeTab === 'files' ? 'vault-tab-btn active' : 'vault-tab-btn',
+      type: 'button',
+      onClick: () => { activeTab = 'files'; render(); },
+    }, icon('file', 15), 'Private Files', h('span', { class: 'vault-tab-badge', text: String(vaultFiles.length) })),
+    h('button', {
+      class: activeTab === 'security' ? 'vault-tab-btn active' : 'vault-tab-btn',
+      type: 'button',
+      onClick: () => { activeTab = 'security'; render(); },
+    }, icon('fingerprint', 15), 'Security & Biometrics', hasSensor && isFingerprintEnrolled() ? h('span', { class: 'vault-tab-badge ok', text: 'On' }) : null));
+
+  let tabContent;
+  if (activeTab === 'passwords') {
+    tabContent = unlockedView();
+  } else if (activeTab === 'files') {
+    tabContent = encryptedFilesView();
+  } else {
+    tabContent = securityDashboardView();
+  }
 
   container.append(
-    h('header', { class: 'section-head' },
-      h('div', {}, h('h1', { text: 'Vault' }),
-        unlocked
-          ? h('p', { class: 'section-sub', id: 'lock-countdown' })
-          : h('p', { class: 'section-sub', text: 'A local encrypted vault on this USB drive. No cloud, no telemetry.' })),
-      unlocked
-        ? h('div', { class: 'section-actions' },
-          h('button', { class: 'btn btn-primary', type: 'button', onClick: () => editEntry() }, icon('plus'), 'Add entry'),
-          h('button', { class: 'btn btn-danger', type: 'button', onClick: () => { lock(); toast('Vault locked.'); } }, icon('lock'), 'Lock now'))
-        : h('span', { class: 'chip chip-quiet', text: 'Locked by default' })),
-    unlocked ? h('div', { class: 'stack' }, view, encryptedFilesView(), fingerprintSettingsView()) : h('div', { class: 'vault-lock' }, view));
+    header,
+    h('div', { class: 'vault-workspace' },
+      tabNav,
+      h('div', { class: 'vault-tab-content' }, tabContent)));
 
-  if (unlocked) {
+  if (activeTab === 'passwords') {
     if (!selectedId || !entries.some((entry) => entry.id === selectedId)) selectedId = vaultMatches()[0]?.id ?? null;
     renderVaultList();
     renderDetail();
-    updateLockCountdown();
   }
-  if (state === 'locked') container.querySelector('#master-unlock')?.focus();
+  updateLockCountdown();
 }
 
 export async function mount(target) {
