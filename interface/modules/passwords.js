@@ -197,30 +197,131 @@ async function removeFile(file) {
   }
 }
 
+async function previewVaultFile(file) {
+  if (state !== 'unlocked' || fileBusy) return;
+  const { signal } = session;
+  fileBusy = true;
+  render();
+  let bytes = null;
+  try {
+    const sealed = await api.readVaultFile(file.id);
+    if (signal.aborted) return;
+    bytes = await decryptVaultFile(key, envelope, file.id, sealed);
+    if (signal.aborted) return;
+    const ext = (file.name.includes('.') ? file.name.split('.').pop() : '').toLowerCase();
+    const mime = ext === 'pdf' ? 'application/pdf'
+      : ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext) ? `image/${ext === 'jpg' ? 'jpeg' : ext}`
+      : ['txt', 'log'].includes(ext) ? 'text/plain; charset=utf-8'
+      : ext === 'json' ? 'application/json; charset=utf-8'
+      : ext === 'md' ? 'text/markdown; charset=utf-8'
+      : 'application/octet-stream';
+    const blob = new Blob([bytes], { type: mime });
+    showPreview({
+      title: file.name,
+      blob,
+      ext,
+      size: file.size,
+      onDownload: window.surgeDesktop ? () => { void exportFile(file); } : null,
+    });
+  } catch (error) {
+    if (!signal.aborted) reportError(error);
+  } finally {
+    fileBusy = false;
+    render();
+  }
+}
+
 function encryptedFilesView() {
-  const picker = h('input', { type: 'file', multiple: true, hidden: true, id: 'vault-file-input',
+  const picker = h('input', {
+    type: 'file', multiple: true, hidden: true, id: 'vault-file-input',
     onChange: () => {
       const selected = [...picker.files];
       picker.value = '';
       void importFiles(selected);
-    } });
-  const list = h('div', { class: 'stack', id: 'vault-files' });
-  for (const file of vaultFiles) {
-    list.append(h('div', { class: 'info-row' },
-      h('span', { class: 'info-label' }, icon('file'), ' ', h('span', { text: file.name })),
-      h('span', { class: 'mono', text: formatBytes(file.size) }),
-      h('div', { class: 'section-actions' },
-        h('button', { class: 'btn btn-small', type: 'button', disabled: fileBusy || !window.surgeDesktop, onClick: () => { void exportFile(file); } }, icon('export'), 'Export copy'),
-        h('button', { class: 'btn btn-small btn-danger', type: 'button', disabled: fileBusy, onClick: () => { void removeFile(file); } }, icon('trash'), 'Delete'))));
+    }
+  });
+
+  const totalBytes = vaultFiles.reduce((acc, f) => acc + (f.size || 0), 0);
+
+  const toolbar = h('div', { class: 'vault-files-toolbar' },
+    h('div', { class: 'vault-files-summary' },
+      h('span', { class: 'vault-files-count', text: `${vaultFiles.length} ${vaultFiles.length === 1 ? 'file' : 'files'}` }),
+      totalBytes > 0 ? h('span', { class: 'vault-files-size mono', text: `· ${formatBytes(totalBytes)}` }) : null,
+      h('span', { class: 'vault-files-hint', text: 'Encrypted with AES-256-GCM. Click any file to preview in Surge.' })),
+    h('button', {
+      class: 'btn btn-primary',
+      type: 'button',
+      disabled: fileBusy,
+      onClick: () => picker.click(),
+    }, icon('plus', 16), 'Import files'));
+
+  if (!vaultFiles.length) {
+    return h('div', { class: 'vault-files-pane' },
+      picker,
+      toolbar,
+      h('div', { class: 'vault-empty-files' },
+        icon('file', 36),
+        h('p', { class: 'vault-empty-title', text: 'No private files in vault' }),
+        h('p', { class: 'vault-empty-desc', text: 'Import sensitive documents, PDFs, photos, or keys. They will be encrypted with your master key and hidden from disk.' }),
+        h('button', { class: 'btn btn-primary', type: 'button', disabled: fileBusy, onClick: () => picker.click() }, icon('plus', 16), 'Import your first file')));
   }
-  if (!vaultFiles.length) list.append(emptyState('No private files yet. Import a file to encrypt it.'));
-  return h('section', { class: 'card' },
-    h('div', { class: 'card-head' }, h('h2', { text: 'Private files' }),
-      h('button', { class: 'btn btn-primary', type: 'button', disabled: fileBusy, onClick: () => picker.click() }, icon('import'), 'Import files')),
+
+  const tableHead = h('thead', {},
+    h('tr', {},
+      h('th', { style: 'width: 40px;' }, ''),
+      h('th', { text: 'Name' }),
+      h('th', { style: 'width: 120px;', text: 'Size' }),
+      h('th', { style: 'width: 220px; text-align: right;', text: 'Actions' })));
+
+  const tableBody = h('tbody', {},
+    vaultFiles.map((file) => {
+      const ext = (file.name.includes('.') ? file.name.split('.').pop() : '').toLowerCase();
+      const canPreview = isPreviewable(ext);
+      const fileIcon = ext === 'pdf' ? 'file' : ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext) ? 'eye' : 'file';
+
+      const previewBtn = canPreview ? h('button', {
+        class: 'btn btn-small',
+        type: 'button',
+        disabled: fileBusy,
+        onClick: (e) => { e.stopPropagation(); void previewVaultFile(file); },
+      }, icon('eye', 14), 'Preview') : null;
+
+      const exportBtn = h('button', {
+        class: 'btn btn-small',
+        type: 'button',
+        disabled: fileBusy || !window.surgeDesktop,
+        onClick: (e) => { e.stopPropagation(); void exportFile(file); },
+      }, icon('export', 14), 'Export');
+
+      const deleteBtn = h('button', {
+        class: 'btn btn-small btn-danger',
+        type: 'button',
+        disabled: fileBusy,
+        onClick: (e) => { e.stopPropagation(); void removeFile(file); },
+      }, icon('trash', 14), 'Delete');
+
+      return h('tr', {
+        class: 'vault-file-row',
+        onClick: () => {
+          if (canPreview) void previewVaultFile(file);
+        },
+      },
+      h('td', { class: 'vault-file-icon-cell' }, icon(fileIcon, 18)),
+      h('td', { class: 'vault-file-name-cell' },
+        h('span', { class: 'vault-file-name', text: file.name }),
+        canPreview ? h('span', { class: 'chip chip-quiet chip-inline', text: ext.toUpperCase() }) : null),
+      h('td', { class: 'vault-file-size-cell mono', text: formatBytes(file.size) }),
+      h('td', { class: 'vault-file-actions-cell' },
+        h('div', { class: 'section-actions', style: 'justify-content: flex-end;' }, previewBtn, exportBtn, deleteBtn)));
+    }));
+
+  const table = h('table', { class: 'table vault-table' }, tableHead, tableBody);
+
+  return h('div', { class: 'vault-files-pane' },
     picker,
-    h('p', { class: 'hint', text: 'Up to 16 MiB per file. Names and contents are encrypted; only opaque encrypted storage is visible on disk. Import copies the file: remove the original separately if you no longer want a readable copy.' }),
-    fileBusy ? h('p', { role: 'status', text: 'Working on encrypted files…' }) : null,
-    list);
+    toolbar,
+    fileBusy ? h('div', { class: 'vault-busy-banner' }, icon('refresh', 16), h('span', { text: 'Working on encrypted files…' })) : null,
+    h('div', { class: 'table-wrap' }, table));
 }
 
 async function loadVault() {
