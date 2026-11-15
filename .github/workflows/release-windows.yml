@@ -1,78 +1,106 @@
-name: Build and publish Surge Windows release
+name: Build Surge Windows installer
 
+# Push a version tag to build the installer. The workflow creates (or reuses)
+# a DRAFT release and uploads the installer only after the build succeeds.
+# Publish the draft manually when you are ready for clients to see the update.
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: write
 
 concurrency:
-  group: surge-release-${{ github.event.release.tag_name }}
+  group: surge-windows-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   windows-installer:
-    if: ${{ !github.event.release.draft && !github.event.release.prerelease }}
-    runs-on: windows-latest
-    timeout-minutes: 45
+    name: Build and attach Windows installer
+    runs-on: windows-2025
+    timeout-minutes: 60
 
     steps:
-      - name: Check out the released source
-        uses: actions/checkout@v4
+      - name: Check out tagged source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.ref }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@d4c94342e560b34958eacfc5d055d21461ed1c5d # v4
         with:
           dotnet-version: 10.0.x
 
-      - name: Resolve release version
+      - name: Resolve and validate release version
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
           VERSION="${VERSION#.}"
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Release tag must look like v1.2.3 or v.1.2.3"
+            echo "::error::Tag must look like v1.2.3 or v.1.2.3"
             exit 1
           fi
+          echo "SURGE_TAG=$TAG" >> "$GITHUB_ENV"
           echo "SURGE_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - name: Stamp the Electron application version
-        run: npm version "${{ env.SURGE_VERSION }}" --no-git-tag-version --prefix desktop
-
-      - name: Install Electron build dependencies
+      - name: Install desktop build dependencies
         run: npm ci --prefix desktop
 
-      - name: Validate updater JavaScript and run tests
+      - name: Validate updater and run unit tests
+        shell: pwsh
         run: |
           node --check desktop/main.cjs
           node --check desktop/update-service.cjs
           node --test tests/updater.test.cjs
 
-      - name: Build Electron desktop package and .NET helper
+      - name: Build Electron desktop package and storage helper
         run: node packaging/desktop.cjs
 
       - name: Assemble installer payload
         shell: pwsh
         run: |
+          if (-not (Test-Path "build/desktop/Surge-win32-x64/Surge.exe")) {
+            throw "The packaged Surge.exe was not produced."
+          }
           New-Item -ItemType Directory -Force -Path build | Out-Null
           Compress-Archive -Path "build/desktop/Surge-win32-x64/*" -DestinationPath "build/app.zip" -CompressionLevel Optimal
+          if (-not (Test-Path "build/app.zip")) {
+            throw "The installer payload archive was not produced."
+          }
 
       - name: Build self-contained Windows installer
         run: dotnet publish installer/SurgeInstaller.csproj --configuration Release --runtime win-x64 --self-contained true -p:Version=${{ env.SURGE_VERSION }} --output build/installer
 
-      - name: Attach installer to the published GitHub Release
+      - name: Verify installer output
+        shell: pwsh
+        run: |
+          $installer = "build/installer/Surge-Setup.exe"
+          if (-not (Test-Path $installer)) {
+            throw "Expected installer not found: $installer"
+          }
+          $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "Installer SHA-256: $hash"
+          "Installer size: $((Get-Item $installer).Length) bytes"
+
+      - name: Create or reuse a draft GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release upload "${GITHUB_REF_NAME}" "build/installer/Surge-Setup.exe" --clobber
+          if ! gh release view "$SURGE_TAG" >/dev/null 2>&1; then
+            gh release create "$SURGE_TAG" --draft --title "Surge $SURGE_VERSION" --generate-notes
+          fi
+
+      - name: Upload installer to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ env.SURGE_TAG }}" "build/installer/Surge-Setup.exe" --clobber
