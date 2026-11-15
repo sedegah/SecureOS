@@ -373,6 +373,61 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
         return fullPath;
     }
 
+    private ApiResponse BiometricStatus()
+    {
+        try
+        {
+            var op = Windows.Security.Credentials.UI.UserConsentVerifier.CheckAvailabilityAsync();
+            var avail = op.AsTask().GetAwaiter().GetResult();
+            bool isAvailable = avail == Windows.Security.Credentials.UI.UserConsentVerifierAvailability.Available;
+            return ApiResponse.Json(200, new JsonObject
+            {
+                ["available"] = isAvailable,
+                ["status"] = avail.ToString(),
+            });
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Json(200, new JsonObject
+            {
+                ["available"] = false,
+                ["status"] = ex.Message,
+            });
+        }
+    }
+
+    private ApiResponse BiometricVerify(byte[] body)
+    {
+        try
+        {
+            string message = "Scan your fingerprint to unlock Surge Vault";
+            if (body.Length > 0)
+            {
+                try
+                {
+                    JsonObject? input = ParseObject(body);
+                    if (input?["message"]?.GetValue<string>() is string customMsg && !string.IsNullOrWhiteSpace(customMsg))
+                        message = customMsg;
+                }
+                catch { }
+            }
+
+            var op = Windows.Security.Credentials.UI.UserConsentVerifier.RequestVerificationAsync(message);
+            var result = op.AsTask().GetAwaiter().GetResult();
+            bool verified = result == Windows.Security.Credentials.UI.UserConsentVerificationResult.Verified;
+
+            return ApiResponse.Json(200, new JsonObject
+            {
+                ["verified"] = verified,
+                ["status"] = result.ToString(),
+            });
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Error(500, "biometric-error", ex.Message);
+        }
+    }
+
     private static ApiResponse Ok() => ApiResponse.Json(200, new JsonObject { ["ok"] = true });
 
     private static bool RequireConfirm(JsonObject input) => input["confirm"]?.GetValue<bool>() == true;

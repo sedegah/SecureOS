@@ -318,7 +318,8 @@ const biometricPath = () => path.join(root, 'Data', 'PasswordVault', 'biometric.
 ipcMain.handle('surge:biometric-is-available', async (event) => {
   requireWorkspace(event);
   try {
-    return Boolean(safeStorage?.isEncryptionAvailable());
+    const status = await helperCall('GET', '/api/biometric/status');
+    return Boolean(status?.available);
   } catch {
     return false;
   }
@@ -333,6 +334,10 @@ ipcMain.handle('surge:biometric-enroll', async (event, password) => {
   requireWorkspace(event);
   if (!safeStorage || !safeStorage.isEncryptionAvailable()) throw new Error('Biometric and credential protection is not available.');
   if (!password || typeof password !== 'string') throw new Error('Master password is required.');
+
+  const verify = await helperCall('POST', '/api/biometric/verify', { message: 'Verify your fingerprint to enable biometric unlock for Surge Vault' });
+  if (!verify?.verified) throw new Error('Fingerprint verification was cancelled or failed.');
+
   const file = biometricPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const encrypted = safeStorage.encryptString(password);
@@ -344,6 +349,10 @@ ipcMain.handle('surge:biometric-unlock', async (event) => {
   requireWorkspace(event);
   const file = biometricPath();
   if (!fs.existsSync(file)) throw new Error('No fingerprint or biometric credential enrolled.');
+
+  const verify = await helperCall('POST', '/api/biometric/verify', { message: 'Scan your fingerprint to unlock Surge Vault' });
+  if (!verify?.verified) throw new Error('Fingerprint verification was cancelled or failed.');
+
   const encrypted = fs.readFileSync(file);
   return safeStorage.decryptString(encrypted);
 });
