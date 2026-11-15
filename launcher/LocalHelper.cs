@@ -56,7 +56,7 @@ internal sealed class LocalHelper : IDisposable, IBrowserControl
     }
 
     public int Port { get; }
-    public string Origin => $"http://127.0.0.1:{Port}";
+    public string Origin => $"http://localhost:{Port}";
     public string HomepageUrl => $"{Origin}/#k={token}";
     public bool BrowserRunning { get; set; }
     public long LastHeartbeatTicks => Interlocked.Read(ref lastHeartbeatTicks);

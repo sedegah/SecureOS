@@ -179,7 +179,7 @@
     elements.reloadIcon.setAttribute("href", tab?.loading ? "#icon-stop" : "#icon-reload");
     elements.address.disabled = !connected || !tab;
     elements.go.disabled = elements.address.disabled;
-    elements.bookmark.disabled = !connected || !hasPage;
+    if (elements.bookmark) elements.bookmark.disabled = !connected || !hasPage;
     elements.workspace.disabled = !connected;
     elements.downloads.disabled = !connected;
     const count = Number.isFinite(currentState.downloadCount)
@@ -281,7 +281,9 @@
   elements.reload.addEventListener("click", () => {
     void runCommand(activeTab()?.loading ? "stop" : "reload");
   });
-  elements.bookmark.addEventListener("click", () => { void runCommand("bookmark"); });
+  if (elements.bookmark) {
+    elements.bookmark.addEventListener("click", () => { void runCommand("bookmark"); });
+  }
   elements.workspace.addEventListener("click", () => { void runCommand("workspace"); });
   elements.downloads.addEventListener("click", () => { void runCommand("downloads"); });
   elements.addressForm.addEventListener("submit", (event) => {

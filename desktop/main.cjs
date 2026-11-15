@@ -364,7 +364,9 @@ else {
       icon: fs.existsSync(iconPath) ? iconPath : undefined,
       webPreferences: { preload: path.join(__dirname, 'workspace-preload.cjs'), partition: 'surge-workspace', sandbox: true, contextIsolation: true, nodeIntegration: false } });
     workspace.removeMenu();
-    workspace.webContents.session.setPermissionRequestHandler((contents, permission, callback) => callback(contents === workspace?.webContents && permission === 'clipboard-sanitized-write'));
+    const ALLOWED_WORKSPACE_PERMISSIONS = new Set(['clipboard-sanitized-write', 'publickey-credentials-get', 'publickey-credentials-create']);
+    workspace.webContents.session.setPermissionRequestHandler((contents, permission, callback) => callback(contents === workspace?.webContents && ALLOWED_WORKSPACE_PERMISSIONS.has(permission)));
+    workspace.webContents.session.setPermissionCheckHandler((contents, permission) => contents === workspace?.webContents && ALLOWED_WORKSPACE_PERMISSIONS.has(permission));
     workspace.webContents.setWindowOpenHandler(({ url }) => { if (webUrl(url)) void openBrowser(url).catch(error => dialog.showErrorBox('Cannot open browser', error.message)); return { action: 'deny' }; });
     workspace.webContents.on('will-navigate', (event, target) => {
       if (!target.startsWith(baseUrl + '/')) { event.preventDefault(); if (webUrl(target)) void openBrowser(target); }

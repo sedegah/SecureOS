@@ -1,5 +1,6 @@
 // Fingerprint / Biometric authentication for Surge Vault using WebAuthn Platform Authenticator.
-// Only available and shown if the host system has a platform authenticator (e.g. Windows Hello Fingerprint sensor).
+// Works inside the Electron desktop app (localhost origin) and in standalone browser preview.
+// Only available when the host system has a platform authenticator (e.g. Windows Hello fingerprint sensor).
 
 const STORAGE_KEY = 'surge.vault.fingerprint';
 
@@ -15,16 +16,16 @@ function fromBase64(base64) {
   return bytes;
 }
 
-let sensorAvailablePromise = null;
+let sensorAvailableCache = null;
 
 export async function isFingerprintSensorAvailable() {
   if (typeof window === 'undefined' || !window.PublicKeyCredential) return false;
   if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return false;
 
-  if (sensorAvailablePromise === null) {
-    sensorAvailablePromise = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false);
+  if (sensorAvailableCache === null) {
+    sensorAvailableCache = PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(() => false);
   }
-  return sensorAvailablePromise;
+  return sensorAvailableCache;
 }
 
 export function isFingerprintEnrolled() {
@@ -42,6 +43,13 @@ export function removeFingerprintEnrollment() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
+// WebAuthn RP configuration: always use 'localhost' as the relying party ID.
+// This works for both Electron (which loads from http://localhost:<port>)
+// and standard browser previews on localhost.
+// WebAuthn rejects raw IP addresses (127.0.0.1) — 'localhost' is the only
+// loopback domain that Chromium treats as a valid RP ID.
+const RP_CONFIG = { name: 'Surge Vault', id: 'localhost' };
+
 export async function enrollFingerprint(masterPassword) {
   if (!masterPassword || typeof masterPassword !== 'string') {
     throw new Error('Master password is required for enrollment.');
@@ -50,33 +58,43 @@ export async function enrollFingerprint(masterPassword) {
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const userId = crypto.getRandomValues(new Uint8Array(16));
 
-  const credential = await navigator.credentials.create({
-    publicKey: {
-      challenge,
-      rp: { name: 'Surge Vault', id: window.location.hostname },
-      user: {
-        id: userId,
-        name: 'vault-user',
-        displayName: 'Surge Vault User',
+  let credential;
+  try {
+    credential = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: RP_CONFIG,
+        user: {
+          id: userId,
+          name: 'vault-user',
+          displayName: 'Surge Vault User',
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: 'public-key' },  // ES256
+          { alg: -257, type: 'public-key' }, // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          userVerification: 'required',
+          requireResidentKey: false,
+        },
+        timeout: 60000,
       },
-      pubKeyCredParams: [
-        { alg: -7, type: 'public-key' },  // ES256
-        { alg: -257, type: 'public-key' }, // RS256
-      ],
-      authenticatorSelection: {
-        authenticatorAttachment: 'platform',
-        userVerification: 'required',
-        requireResidentKey: false,
-      },
-      timeout: 60000,
-    },
-  });
+    });
+  } catch (err) {
+    if (err.name === 'SecurityError') {
+      throw new Error('Fingerprint enrollment requires the app to run on localhost. Ensure you are using the installed Surge desktop application.');
+    }
+    if (err.name === 'NotAllowedError') {
+      throw new Error('Fingerprint sensor prompt was cancelled or timed out.');
+    }
+    throw new Error(err.message || 'Fingerprint enrollment failed.');
+  }
 
   if (!credential || !credential.rawId) {
     throw new Error('Fingerprint verification was cancelled or failed.');
   }
 
-  // Derive an encryption key bound to the credential ID and a fresh random salt
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const enc = new TextEncoder();
@@ -90,16 +108,11 @@ export async function enrollFingerprint(masterPassword) {
   );
 
   const derivedKey = await crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt,
-      iterations: 100000,
-      hash: 'SHA-256',
-    },
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
-    ['encrypt', 'decrypt']
+    ['encrypt']
   );
 
   const encrypted = await crypto.subtle.encrypt(
@@ -128,20 +141,25 @@ export async function unlockWithFingerprint() {
   const credentialId = fromBase64(record.credentialId);
   const challenge = crypto.getRandomValues(new Uint8Array(32));
 
-  const assertion = await navigator.credentials.get({
-    publicKey: {
-      challenge,
-      allowCredentials: [
-        {
-          type: 'public-key',
-          id: credentialId,
-          transports: ['internal'],
-        },
-      ],
-      userVerification: 'required',
-      timeout: 60000,
-    },
-  });
+  let assertion;
+  try {
+    assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge,
+        rpId: RP_CONFIG.id,
+        allowCredentials: [
+          { type: 'public-key', id: credentialId, transports: ['internal'] },
+        ],
+        userVerification: 'required',
+        timeout: 60000,
+      },
+    });
+  } catch (err) {
+    if (err.name === 'NotAllowedError') {
+      throw new Error('Fingerprint verification was cancelled or timed out.');
+    }
+    throw new Error(err.message || 'Fingerprint verification failed.');
+  }
 
   if (!assertion || !assertion.rawId) {
     throw new Error('Fingerprint verification was cancelled or failed.');
@@ -160,12 +178,7 @@ export async function unlockWithFingerprint() {
   );
 
   const derivedKey = await crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt,
-      iterations: 100000,
-      hash: 'SHA-256',
-    },
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,
@@ -178,7 +191,5 @@ export async function unlockWithFingerprint() {
     encryptedPassword
   );
 
-  const dec = new TextDecoder();
-  return dec.decode(decryptedBytes);
+  return new TextDecoder().decode(decryptedBytes);
 }
-

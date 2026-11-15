@@ -3,18 +3,23 @@ import { h, clear, toast, reportError, formatBytes, relativeTime, emptyState, ca
 import { icon } from './modules/icons.js';
 import * as settings from './modules/settings.js';
 import * as notes from './modules/notes.js';
-import * as bookmarks from './modules/bookmarks.js';
 import * as files from './modules/files.js';
 import * as downloads from './modules/downloads.js';
 import * as passwords from './modules/passwords.js';
 import * as vpn from './modules/vpn.js';
+
+// Ensure origin is always localhost rather than an IP, as WebAuthn strictly disallows IP addresses for relying party IDs.
+if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
+  const target = new URL(window.location.href);
+  target.hostname = 'localhost';
+  window.location.replace(target.href);
+}
 
 const ROUTES = [
   { id: 'home', label: 'Home', icon: 'home', mount: renderHome },
   { id: 'browser', label: 'Browser', icon: 'globe', mount: renderBrowserSection },
   { id: 'files', label: 'Files', icon: 'files', mount: files.mount },
   { id: 'notes', label: 'Notes', icon: 'notes', mount: notes.mount },
-  { id: 'bookmarks', label: 'Bookmarks', icon: 'bookmarks', mount: bookmarks.mount },
   { id: 'downloads', label: 'Downloads', icon: 'downloads', mount: downloads.mount },
   { id: 'passwords', label: 'Vault', icon: 'lock', mount: passwords.mount },
   { id: 'vpn', label: 'Browser proxy', icon: 'vpn', mount: vpn.mount },
@@ -25,7 +30,6 @@ const TILES = [
   { route: 'browser', icon: 'globe', title: 'Surge Browser', sub: 'Open the web browser' },
   { route: 'files', icon: 'files', title: 'My Files', sub: 'Documents and files' },
   { route: 'notes', icon: 'notes', title: 'My Notes', sub: 'Personal notes' },
-  { route: 'bookmarks', icon: 'bookmarks', title: 'Bookmarks', sub: 'Saved websites' },
   { route: 'downloads', icon: 'downloads', title: 'Downloads', sub: 'Downloaded files' },
   { route: 'passwords', icon: 'lock', title: 'Vault', sub: 'Passwords and private files' },
   { route: 'vpn', icon: 'vpn', title: 'Browser proxy', sub: 'Bring your own server' },
@@ -122,7 +126,6 @@ async function applyRoute() {
   }
   if (match.id !== 'notes') await notes.stop();
   if (match.id !== 'passwords') passwords.stop();
-  if (match.id !== 'bookmarks') bookmarks.stop();
   currentRoute = match.id;
   markActiveRoute();
   if (match.id !== 'vpn') vpn.stop();
@@ -331,7 +334,7 @@ async function boot() {
   }
 
   try {
-    await Promise.all([settings.loadSettings(), notes.loadNotes(), bookmarks.loadBookmarks()]);
+    await Promise.all([settings.loadSettings(), notes.loadNotes()]);
   } catch (error) {
     reportError(error);
   }
@@ -346,13 +349,9 @@ async function boot() {
   });
   bus.addEventListener('restored-from-backup', () => toast('A damaged workspace file was recovered from its backup copy.', 'warn'));
   bus.addEventListener('notes-changed', () => { if (currentRoute === 'home') void renderHome(main); });
-  bus.addEventListener('bookmarks-changed', () => { if (currentRoute === 'home') void renderHome(main); });
   bus.addEventListener('vpn-changed', refreshPill);
   bus.addEventListener('settings-changed', () => { void refreshStatus(); });
 
-  window.surgeDesktop?.onBookmark((bookmark) => {
-    void bookmarks.addItem(bookmark).then(() => toast('Bookmark saved.')).catch(reportError);
-  });
   window.surgeDesktop?.onNavigate((destination) => {
     if (ROUTES.some((entry) => entry.id === destination)) navigate(destination);
   });

@@ -7,6 +7,7 @@ import { isFingerprintSensorAvailable, isFingerprintEnrolled, removeFingerprintE
 
 let container = null;
 let hasSensor = false;
+let hasSensorChecked = false;
 let state = 'unknown';
 let envelope = null;
 let key = null;
@@ -18,6 +19,7 @@ let query = '';
 let errorMessage = '';
 let revealed = new Set();
 let lastActivity = Date.now();
+let unlockTime = 0;
 let clipboardTimer = null;
 let lockTicker = null;
 let activityBound = false;
@@ -47,7 +49,12 @@ function bindActivity() {
   if (activityBound) return;
   activityBound = true;
   for (const event of ['pointerdown', 'keydown', 'wheel']) {
-    document.addEventListener(event, () => { lastActivity = Date.now(); }, { passive: true, capture: true });
+    document.addEventListener(event, (e) => {
+      // Only reset activity if user is actively interacting inside the vault container
+      if (state === 'unlocked' && container?.isConnected && container.contains(e.target)) {
+        lastActivity = Date.now();
+      }
+    }, { passive: true, capture: true });
   }
   lockTicker = setInterval(() => {
     if (state !== 'unlocked') return;
@@ -58,7 +65,9 @@ function bindActivity() {
       updateLockCountdown();
     }
   }, 1000);
-  bus.addEventListener('settings-changed', () => { lastActivity = Date.now(); });
+  bus.addEventListener('settings-changed', () => {
+    if (state === 'unlocked') lastActivity = Date.now();
+  });
 }
 
 export function lock() {
@@ -72,6 +81,7 @@ export function lock() {
   void window.surgeDesktop?.cancelVaultExport().catch(() => {});
   selectedId = null;
   revealed = new Set();
+  unlockTime = 0;
   void clearClipboard();
   if (state !== 'unknown' && state !== 'corrupt') {
     state = envelope ? 'locked' : 'no-vault';
@@ -356,6 +366,7 @@ function lockedView() {
       vaultFiles = opened.vault.files;
       state = 'unlocked';
       lastActivity = Date.now();
+      unlockTime = Date.now();
     } catch (error) {
       if (signal.aborted) return;
       state = 'locked';
@@ -479,9 +490,13 @@ async function removeEntry(entry) {
 function updateLockCountdown() {
   const node = container?.querySelector('#lock-countdown');
   if (!node) return;
-  const remaining = Math.max(0, lockMinutes() * 60000 - (Date.now() - lastActivity));
+  const elapsed = Date.now() - lastActivity;
+  const total = lockMinutes() * 60000;
+  const remaining = Math.max(0, total - elapsed);
   const seconds = Math.ceil(remaining / 1000);
-  node.textContent = `Vault unlocked · locks in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  node.textContent = `Vault unlocked · auto-locks in ${mins}:${String(secs).padStart(2, '0')}`;
 }
 
 function vaultMatches() {
@@ -648,13 +663,18 @@ function render() {
 export async function mount(target) {
   container = target;
   bindActivity();
-  try {
-    hasSensor = await isFingerprintSensorAvailable();
-  } catch {
-    hasSensor = false;
+  if (!hasSensorChecked) {
+    try {
+      hasSensor = await isFingerprintSensorAvailable();
+    } catch {
+      hasSensor = false;
+    }
+    hasSensorChecked = true;
   }
   if (state === 'unknown') await loadVault();
-  if (state === 'unlocked' && Date.now() - lastActivity > lockMinutes() * 60000) lock();
+  if (state === 'unlocked' && Date.now() - lastActivity > lockMinutes() * 60000) {
+    lock();
+  }
   render();
 }
 
