@@ -391,8 +391,9 @@ internal sealed class DesktopWindow : Window
         lockScreen.Show();
     }
 
-    private void ToggleFlyout(FrameworkElement flyout)
+    private void ToggleFlyout(FrameworkElement? flyout)
     {
+        if (flyout == null) return;
         bool wasVisible = flyout.Visibility == Visibility.Visible;
         CloseAllFlyouts();
         if (!wasVisible)

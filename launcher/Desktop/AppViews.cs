@@ -55,22 +55,22 @@ internal sealed class BrowserAppView : Grid
         toolGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Go / Search
 
         backBtn = CreateNavButton(AppIcons.NavBack, "Back");
-        backBtn.Click += (_, _) => { if (webView.CanGoBack) webView.GoBack(); };
+        backBtn.Click += (_, _) => { if (webView?.CanGoBack == true) webView.GoBack(); };
         Grid.SetColumn(backBtn, 0);
         toolGrid.Children.Add(backBtn);
 
         forwardBtn = CreateNavButton(AppIcons.NavForward, "Forward");
-        forwardBtn.Click += (_, _) => { if (webView.CanGoForward) webView.GoForward(); };
+        forwardBtn.Click += (_, _) => { if (webView?.CanGoForward == true) webView.GoForward(); };
         Grid.SetColumn(forwardBtn, 1);
         toolGrid.Children.Add(forwardBtn);
 
         refreshBtn = CreateNavButton(AppIcons.NavRefresh, "Refresh");
-        refreshBtn.Click += (_, _) => webView.Reload();
+        refreshBtn.Click += (_, _) => webView?.Reload();
         Grid.SetColumn(refreshBtn, 2);
         toolGrid.Children.Add(refreshBtn);
 
         var homeBtn = CreateNavButton(AppIcons.NavHome, "Home");
-        homeBtn.Click += (_, _) => webView.CoreWebView2?.Navigate(helper.HomepageUrl);
+        homeBtn.Click += (_, _) => webView?.CoreWebView2?.Navigate(helper.HomepageUrl);
         Grid.SetColumn(homeBtn, 3);
         toolGrid.Children.Add(homeBtn);
 
@@ -518,8 +518,8 @@ internal sealed class NotesAppView : Grid
             if (notesListBox.SelectedItem is NoteRecord note)
             {
                 currentNote = note;
-                titleBox.Text = note.Title;
-                contentBox.Text = note.Content;
+                if (titleBox != null) titleBox.Text = note.Title;
+                if (contentBox != null) contentBox.Text = note.Content;
                 UpdateStats();
             }
         };
@@ -745,7 +745,8 @@ internal sealed class VaultAppView : Grid
             if (isUnlocked && remainingSeconds > 0)
             {
                 remainingSeconds--;
-                timerBlock.Text = $"Auto-locks in {remainingSeconds / 60}:{remainingSeconds % 60:D2}";
+                if (timerBlock != null)
+                    timerBlock.Text = $"Auto-locks in {remainingSeconds / 60}:{remainingSeconds % 60:D2}";
                 if (remainingSeconds <= 0)
                     Lock();
             }
