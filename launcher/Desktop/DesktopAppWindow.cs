@@ -7,7 +7,7 @@ using System.Windows.Shapes;
 
 namespace SurgePortable.Desktop;
 
-public enum WindowResizeEdge
+internal enum WindowResizeEdge
 {
     None,
     Left,
@@ -23,7 +23,7 @@ public enum WindowResizeEdge
 /// <summary>
 /// A lightweight, draggable, resizable internal application window for the Surge desktop workspace.
 /// </summary>
-public sealed class DesktopAppWindow : Border
+internal sealed class DesktopAppWindow : Border
 {
     private readonly Border titleBar;
     private readonly TextBlock titleBlock;

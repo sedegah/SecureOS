@@ -15,7 +15,7 @@ namespace SurgePortable.Desktop;
 // ============================================================================
 // 1. BROWSER APP VIEW
 // ============================================================================
-public sealed class BrowserAppView : Grid
+internal sealed class BrowserAppView : Grid
 {
     private readonly PathManager paths;
     private readonly LocalHelper helper;
@@ -231,7 +231,7 @@ public sealed class BrowserAppView : Grid
 // ============================================================================
 // 2. FILES APP VIEW (USB File Explorer)
 // ============================================================================
-public sealed class FilesAppView : Grid
+internal sealed class FilesAppView : Grid
 {
     private readonly PathManager paths;
     private readonly ListView fileListView;
@@ -459,7 +459,7 @@ public sealed class FilesAppView : Grid
 // ============================================================================
 // 3. NOTES APP VIEW
 // ============================================================================
-public sealed class NotesAppView : Grid
+internal sealed class NotesAppView : Grid
 {
     private readonly PathManager paths;
     private readonly ListBox notesListBox;
@@ -720,7 +720,7 @@ public sealed class NotesAppView : Grid
 // ============================================================================
 // 4. VAULT APP VIEW (Password & Credential Manager)
 // ============================================================================
-public sealed class VaultAppView : Grid
+internal sealed class VaultAppView : Grid
 {
     private readonly PathManager paths;
     private readonly Grid lockView;
@@ -1138,7 +1138,7 @@ public sealed class VaultAppView : Grid
 // ============================================================================
 // 5. VPN / PROXY APP VIEW
 // ============================================================================
-public sealed class VpnAppView : Grid
+internal sealed class VpnAppView : Grid
 {
     private readonly PathManager paths;
     private readonly LocalHelper helper;
@@ -1341,7 +1341,7 @@ public sealed class VpnAppView : Grid
 // ============================================================================
 // 6. DOWNLOADS APP VIEW
 // ============================================================================
-public sealed class DownloadsAppView : Grid
+internal sealed class DownloadsAppView : Grid
 {
     private readonly PathManager paths;
     private readonly ListView downloadsList;
@@ -1454,7 +1454,7 @@ public sealed class DownloadsAppView : Grid
 // ============================================================================
 // 7. SETTINGS APP VIEW (Desktop & Workspace Customization)
 // ============================================================================
-public sealed class SettingsAppView : Grid
+internal sealed class SettingsAppView : Grid
 {
     private readonly DesktopSettings settings;
     private readonly Action<DesktopSettings> onSettingsUpdated;

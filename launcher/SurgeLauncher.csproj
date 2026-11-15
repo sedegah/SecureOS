@@ -4,7 +4,6 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Surge</AssemblyName>
     <RootNamespace>SurgePortable</RootNamespace>
     <Nullable>enable</Nullable>
@@ -27,6 +26,7 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <Using Include="System.IO" />
     <Using Include="System.IO.Path" Alias="Path" />
+    <Using Include="System.Windows.Controls.Primitives" />
     <EmbeddedResource Include="..\desktop\assets\splash.jpg" LogicalName="splash.jpg" />
     <EmbeddedResource Include="..\desktop\assets\icon.ico" LogicalName="icon.ico" />
     <EmbeddedResource Include="..\desktop\assets\icon.png" LogicalName="icon.png" />
