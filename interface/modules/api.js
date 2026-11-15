@@ -109,6 +109,7 @@ export const api = {
     }
     return await response.blob();
   },
+  systemReset: (options = {}) => request('POST', '/api/system/reset', options),
 };
 
 export function joinPath(parent, name) {

@@ -1,5 +1,5 @@
 import { api, bus } from './api.js';
-import { h, clear, toast, reportError, formatBytes, cardLabel, switchRow } from './ui.js';
+import { h, clear, toast, reportError, formatBytes, cardLabel, switchRow, confirmDialog } from './ui.js';
 import { icon } from './icons.js';
 
 export const SEARCH_ENGINES = {
@@ -147,6 +147,30 @@ export async function mount(target) {
       infoRow('Bookmarks', 'Data/Bookmarks/bookmarks.json'),
       infoRow('Password vault', 'Data/PasswordVault/vault.enc (encrypted)'),
       storage ? infoRow('Storage', `${formatBytes(storage.used)} used of ${formatBytes(storage.total)} • ${formatBytes(storage.free)} free`) : null),
+    h('section', { class: 'card' },
+      cardLabel('Environment Reset'),
+      h('p', { text: 'Restore Surge to factory default state. This clears notes, bookmarks, custom preferences, and cached session data. Your encrypted password vault is preserved.' }),
+      h('div', { class: 'dialog-actions', style: 'margin-top: 14px; justify-content: flex-start;' },
+        (() => {
+          const resetBtn = h('button', { class: 'btn btn-danger', type: 'button' }, icon('refresh'), 'Reset environment');
+          resetBtn.addEventListener('click', async () => {
+            const confirmed = await confirmDialog({
+              title: 'Reset Surge Environment',
+              message: 'This will restore your workspace settings to defaults and remove saved notes and bookmarks. Encrypted vault credentials will remain safe. Do you want to proceed?',
+              confirmLabel: 'Reset environment',
+              danger: true,
+            });
+            if (!confirmed) return;
+            try {
+              await api.systemReset({ resetVault: false });
+              toast('Workspace environment reset successfully.');
+              setTimeout(() => location.reload(), 1200);
+            } catch (err) {
+              reportError(err);
+            }
+          });
+          return resetBtn;
+        })())),
     h('div', { class: 'banner banner-info' }, icon('warning'),
       h('div', {},
         h('strong', { text: 'Before you unplug' }),

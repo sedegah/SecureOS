@@ -247,6 +247,51 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
         }
     }
 
+    private ApiResponse SystemReset(byte[] body)
+    {
+        bool resetVault = false;
+        if (body.Length > 0)
+        {
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("resetVault", out JsonElement val))
+                    resetVault = val.GetBoolean();
+            }
+            catch { }
+        }
+
+        try
+        {
+            documents.Delete("notes");
+            documents.Delete("bookmarks");
+            documents.Delete("settings");
+            documents.Delete("vpn");
+
+            if (resetVault)
+            {
+                documents.Delete("vault");
+                if (Directory.Exists(paths.VaultDir))
+                {
+                    foreach (string file in Directory.GetFiles(paths.VaultDir))
+                    {
+                        try { File.Delete(file); } catch { }
+                    }
+                }
+            }
+
+            return ApiResponse.Json(200, new JsonObject
+            {
+                ["ok"] = true,
+                ["message"] = "Environment reset completed successfully."
+            });
+        }
+        catch (Exception ex)
+        {
+            return ApiResponse.Error(500, "reset-failed", "Could not complete environment reset: " + ex.Message);
+        }
+    }
+
     private ApiResponse VpnState()
     {
         BrowserPolicy policy = BrowserPolicy.Load(documents);
