@@ -2,18 +2,18 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>Surge</AssemblyName>
     <RootNamespace>SurgePortable</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
     <Version>1.0.0</Version>
     <Product>Surge Portable</Product>
-    <AssemblyTitle>Surge Portable Desktop</AssemblyTitle>
+    <AssemblyTitle>Surge Portable Launcher</AssemblyTitle>
     <Company>Surge</Company>
     <ApplicationIcon>..\desktop\assets\icon.ico</ApplicationIcon>
     <DebugType>none</DebugType>
@@ -22,23 +22,21 @@
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-    <Using Include="System.IO" />
-    <Using Include="System.IO.Path" Alias="Path" />
-    <Using Include="System.Windows.Controls.Primitives" />
-    <EmbeddedResource Include="..\desktop\assets\splash.jpg" LogicalName="splash.jpg" />
-    <EmbeddedResource Include="..\desktop\assets\icon.ico" LogicalName="icon.ico" />
-    <EmbeddedResource Include="..\desktop\assets\icon.png" LogicalName="icon.png" />
-    <EmbeddedResource Include="..\desktop\assets\surge-logo.jpg" LogicalName="surge-logo.jpg" />
-  </ItemGroup>
-
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <StackTraceSupport>false</StackTraceSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
   </PropertyGroup>
 
 </Project>

@@ -24,14 +24,12 @@ internal sealed class PathManager
     public string BrowserDir => Path.Combine(Root, "Browser");
     public string InterfaceDir => Path.Combine(Root, "Interface");
     public string DataDir => Path.Combine(Root, "Data");
-    public string Data => DataDir;
     public string ProfileDir => Path.Combine(DataDir, "Profile");
     public string NotesDir => Path.Combine(DataDir, "Notes");
     public string BookmarksDir => Path.Combine(DataDir, "Bookmarks");
     public string SettingsDir => Path.Combine(DataDir, "Settings");
     public string VaultDir => Path.Combine(DataDir, "PasswordVault");
     public string DownloadsDir => Path.Combine(Root, "Downloads");
-    public string Downloads => DownloadsDir;
 
     public bool UsbPresent => Directory.Exists(Root);
     public bool IsInstalled { get; set; }
