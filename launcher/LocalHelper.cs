@@ -26,8 +26,8 @@ internal sealed class LocalHelper : IDisposable, IBrowserControl
     };
 
     private const string ContentSecurityPolicyBase =
-        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; " +
-        "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+        "frame-src 'self' blob: data:; object-src 'self' blob:; worker-src 'self' blob:; media-src 'self' blob: data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
     private readonly PathManager paths;
     private readonly Api api;
