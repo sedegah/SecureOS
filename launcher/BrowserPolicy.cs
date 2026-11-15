@@ -119,8 +119,14 @@ internal sealed class BrowserPolicy
             },
         };
 
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(target, policies.ToJsonString(), new UTF8Encoding(false));
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(target, policies.ToJsonString(), new UTF8Encoding(false));
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private static JsonObject ReadObject(DocumentStore documents, string name)

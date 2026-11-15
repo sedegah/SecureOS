@@ -20,7 +20,25 @@ if (!app.isPackaged) {
     fs.cpSync(appInterface, path.join(root, 'Interface'), { recursive: true });
   }
 } else {
-  root = path.dirname(process.execPath);
+  const candidate = path.dirname(process.execPath);
+  let isReadOnly = false;
+  try {
+    const probe = path.join(candidate, '.write_test');
+    fs.writeFileSync(probe, '1');
+    fs.unlinkSync(probe);
+  } catch {
+    isReadOnly = true;
+  }
+  if (isReadOnly) {
+    root = path.join(app.getPath('temp'), 'Surge_Session');
+    fs.mkdirSync(root, { recursive: true });
+    const appInterface = path.join(candidate, 'Interface');
+    if (fs.existsSync(appInterface) && !fs.existsSync(path.join(root, 'Interface'))) {
+      try { fs.cpSync(appInterface, path.join(root, 'Interface'), { recursive: true }); } catch {}
+    }
+  } else {
+    root = candidate;
+  }
 }
 if (!fs.existsSync(root)) throw new Error('The Surge workspace is missing.');
 const profile = path.join(root, 'Data', 'BrowserProfile');

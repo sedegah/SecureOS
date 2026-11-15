@@ -20,16 +20,18 @@ internal sealed class PathManager
     private PathManager(string root) => Root = root;
 
     public string Root { get; }
+    public bool IsReadOnly { get; private set; }
+    public string WritableRoot => IsReadOnly ? Path.Combine(Path.GetTempPath(), "Surge_Session_" + Environment.UserName) : Root;
     public string BrowserDir => Path.Combine(Root, "Browser");
     public string InterfaceDir => Path.Combine(Root, "Interface");
-    public string DataDir => Path.Combine(Root, "Data");
+    public string DataDir => Path.Combine(WritableRoot, "Data");
     public string ProfileDir => Path.Combine(DataDir, "Profile");
     public string NotesDir => Path.Combine(DataDir, "Notes");
     public string BookmarksDir => Path.Combine(DataDir, "Bookmarks");
     public string SettingsDir => Path.Combine(DataDir, "Settings");
     public string VaultDir => Path.Combine(DataDir, "PasswordVault");
-    public string DownloadsDir => Path.Combine(Root, "Downloads");
-    public string DocumentsDir => Path.Combine(Root, "Documents");
+    public string DownloadsDir => IsReadOnly ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads") : Path.Combine(Root, "Downloads");
+    public string DocumentsDir => IsReadOnly ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)) : Path.Combine(Root, "Documents");
 
     private static readonly HashSet<string> SystemDirectories = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -100,17 +102,49 @@ internal sealed class PathManager
 
     public static PathManager Detect(string? root = null)
     {
+        PathManager manager;
         if (root is not null)
         {
             if (!Path.IsPathFullyQualified(root) || !Directory.Exists(root))
                 throw new DirectoryNotFoundException("The Surge workspace folder does not exist.");
-            return new PathManager(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)));
+            manager = new PathManager(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)));
         }
-        string exe = Environment.ProcessPath
-            ?? throw new InvalidOperationException("Cannot determine the Surge executable location.");
-        string dir = Path.GetDirectoryName(exe)
-            ?? throw new InvalidOperationException("Cannot determine the Surge USB folder.");
-        return new PathManager(Path.GetFullPath(dir));
+        else
+        {
+            string exe = Environment.ProcessPath
+                ?? throw new InvalidOperationException("Cannot determine the Surge executable location.");
+            string dir = Path.GetDirectoryName(exe)
+                ?? throw new InvalidOperationException("Cannot determine the Surge USB folder.");
+            manager = new PathManager(Path.GetFullPath(dir));
+        }
+
+        manager.DetectReadOnly();
+        return manager;
+    }
+
+    private void DetectReadOnly()
+    {
+        try
+        {
+            var drive = new DriveInfo(Path.GetPathRoot(Root)!);
+            if (drive.DriveType == DriveType.CDRom)
+            {
+                IsReadOnly = true;
+                return;
+            }
+        }
+        catch { }
+
+        try
+        {
+            string probe = Path.Combine(Root, ".write_probe_" + Environment.ProcessId);
+            File.WriteAllText(probe, "1");
+            File.Delete(probe);
+        }
+        catch
+        {
+            IsReadOnly = true;
+        }
     }
 
     public string MutexName()
@@ -124,14 +158,28 @@ internal sealed class PathManager
         if (!UsbPresent)
             throw new DriveNotFoundException($"The Surge drive is no longer available at {Root}.");
 
-        foreach (string dir in new[] { DataDir, ProfileDir, NotesDir, BookmarksDir, SettingsDir, VaultDir, DownloadsDir, DocumentsDir })
-            Directory.CreateDirectory(dir);
+        try
+        {
+            foreach (string dir in new[] { DataDir, ProfileDir, NotesDir, BookmarksDir, SettingsDir, VaultDir, DownloadsDir, DocumentsDir })
+                Directory.CreateDirectory(dir);
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     public StorageInfo GetStorage()
     {
-        var drive = new DriveInfo(Path.GetPathRoot(Root)!);
-        return new StorageInfo(drive.TotalSize, drive.AvailableFreeSpace);
+        try
+        {
+            string targetPath = IsReadOnly ? WritableRoot : Root;
+            var drive = new DriveInfo(Path.GetPathRoot(targetPath)!);
+            return new StorageInfo(drive.TotalSize, drive.AvailableFreeSpace);
+        }
+        catch
+        {
+            return new StorageInfo(10L * 1024 * 1024 * 1024, 5L * 1024 * 1024 * 1024);
+        }
     }
 
     public string ToRelative(string fullPath)

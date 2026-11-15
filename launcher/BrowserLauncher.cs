@@ -8,7 +8,13 @@ internal static class BrowserLauncher
 
     public static void WritePortablePreferences(PathManager paths, BrowserPolicy policy, string homepageUrl)
     {
-        Directory.CreateDirectory(paths.ProfileDir);
+        try
+        {
+            Directory.CreateDirectory(paths.ProfileDir);
+        }
+        catch (Exception)
+        {
+        }
 
         var prefs = new List<(string Key, string Value)>
         {
@@ -55,7 +61,13 @@ internal static class BrowserLauncher
             text.Append("user_pref(\"").Append(key).Append("\", ").Append(rendered).Append(");\n");
         }
 
-        File.WriteAllText(Path.Combine(paths.ProfileDir, "user.js"), text.ToString(), new UTF8Encoding(false));
+        try
+        {
+            File.WriteAllText(Path.Combine(paths.ProfileDir, "user.js"), text.ToString(), new UTF8Encoding(false));
+        }
+        catch (Exception)
+        {
+        }
     }
 
     public static Process Launch(PathManager paths, string browserExecutable, BrowserPolicy policy, string homepageUrl)
