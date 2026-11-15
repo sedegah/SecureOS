@@ -47,7 +47,7 @@ internal static class BrowserLauncher
         prefs.AddRange(policy.Preferences(homepageUrl));
         policy.WritePolicies(paths);
 
-        var text = new StringBuilder("// Managed by Surge Portable. Rewritten on every launch; edit Data/Settings instead.\n");
+        var text = new StringBuilder();
         foreach ((string key, string value) in prefs)
         {
             bool literal = value is "true" or "false" || (value.Length > 0 && value.All(char.IsDigit));
