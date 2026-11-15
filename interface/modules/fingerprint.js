@@ -1,6 +1,6 @@
-// Fingerprint / Biometric authentication for Surge Vault using WebAuthn Platform Authenticator.
-// Works inside the Electron desktop app (localhost origin) and in standalone browser preview.
-// Only available when the host system has a platform authenticator (e.g. Windows Hello fingerprint sensor).
+// Fingerprint / Biometric authentication for Surge Vault.
+// In the installed desktop app: Uses native secure storage (DPAPI / Windows Hello).
+// In standalone browser preview: Uses WebAuthn Platform Authenticator.
 
 const STORAGE_KEY = 'surge.vault.fingerprint';
 
@@ -19,6 +19,16 @@ function fromBase64(base64) {
 let sensorAvailableCache = null;
 
 export async function isFingerprintSensorAvailable() {
+  // If running inside the installed Surge desktop app, use native credential hardware
+  if (window.surgeDesktop?.biometricIsAvailable) {
+    try {
+      return await window.surgeDesktop.biometricIsAvailable();
+    } catch {
+      return false;
+    }
+  }
+
+  // Standalone browser preview: check WebAuthn
   if (typeof window === 'undefined' || !window.PublicKeyCredential) return false;
   if (typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return false;
 
@@ -30,31 +40,34 @@ export async function isFingerprintSensorAvailable() {
 
 export function isFingerprintEnrolled() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    return Boolean(parsed?.credentialId && parsed?.encryptedPassword);
+    return Boolean(localStorage.getItem(STORAGE_KEY));
   } catch {
     return false;
   }
 }
 
-export function removeFingerprintEnrollment() {
+export async function removeFingerprintEnrollment() {
   localStorage.removeItem(STORAGE_KEY);
+  if (window.surgeDesktop?.biometricRemove) {
+    try {
+      await window.surgeDesktop.biometricRemove();
+    } catch {}
+  }
 }
-
-// WebAuthn RP configuration: always use 'localhost' as the relying party ID.
-// This works for both Electron (which loads from http://localhost:<port>)
-// and standard browser previews on localhost.
-// WebAuthn rejects raw IP addresses (127.0.0.1) — 'localhost' is the only
-// loopback domain that Chromium treats as a valid RP ID.
-const RP_CONFIG = { name: 'Surge Vault', id: 'localhost' };
 
 export async function enrollFingerprint(masterPassword) {
   if (!masterPassword || typeof masterPassword !== 'string') {
     throw new Error('Master password is required for enrollment.');
   }
 
+  // 1. Native Desktop App (no ports, no invalid domain, full Windows Hello integration)
+  if (window.surgeDesktop?.biometricEnroll) {
+    await window.surgeDesktop.biometricEnroll(masterPassword);
+    localStorage.setItem(STORAGE_KEY, 'enrolled-desktop');
+    return true;
+  }
+
+  // 2. Standalone browser preview: WebAuthn
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const userId = crypto.getRandomValues(new Uint8Array(16));
 
@@ -63,15 +76,15 @@ export async function enrollFingerprint(masterPassword) {
     credential = await navigator.credentials.create({
       publicKey: {
         challenge,
-        rp: RP_CONFIG,
+        rp: { name: 'Surge Vault' },
         user: {
           id: userId,
           name: 'vault-user',
           displayName: 'Surge Vault User',
         },
         pubKeyCredParams: [
-          { alg: -7, type: 'public-key' },  // ES256
-          { alg: -257, type: 'public-key' }, // RS256
+          { alg: -7, type: 'public-key' },
+          { alg: -257, type: 'public-key' },
         ],
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
@@ -82,9 +95,6 @@ export async function enrollFingerprint(masterPassword) {
       },
     });
   } catch (err) {
-    if (err.name === 'SecurityError') {
-      throw new Error('Fingerprint enrollment requires the app to run on localhost. Ensure you are using the installed Surge desktop application.');
-    }
     if (err.name === 'NotAllowedError') {
       throw new Error('Fingerprint sensor prompt was cancelled or timed out.');
     }
@@ -134,6 +144,12 @@ export async function enrollFingerprint(masterPassword) {
 }
 
 export async function unlockWithFingerprint() {
+  // 1. Native Desktop App
+  if (window.surgeDesktop?.biometricUnlock) {
+    return await window.surgeDesktop.biometricUnlock();
+  }
+
+  // 2. Standalone browser preview: WebAuthn
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) throw new Error('No fingerprint enrolled on this system.');
   const record = JSON.parse(raw);
@@ -146,7 +162,6 @@ export async function unlockWithFingerprint() {
     assertion = await navigator.credentials.get({
       publicKey: {
         challenge,
-        rpId: RP_CONFIG.id,
         allowCredentials: [
           { type: 'public-key', id: credentialId, transports: ['internal'] },
         ],

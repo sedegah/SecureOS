@@ -18,6 +18,7 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        Application.SetDefaultFont(new Font("Segoe UI", 9.5f, FontStyle.Regular));
 
         if (args.Contains("--uninstall"))
         {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, session, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, ipcMain, dialog, safeStorage } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -309,6 +309,48 @@ ipcMain.handle('surge:vpn-apply', async (event, config) => {
   return proxyState();
 });
 
+const biometricPath = () => path.join(root, 'Data', 'PasswordVault', 'biometric.dat');
+
+ipcMain.handle('surge:biometric-is-available', async (event) => {
+  requireWorkspace(event);
+  try {
+    return Boolean(safeStorage?.isEncryptionAvailable());
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('surge:biometric-is-enrolled', async (event) => {
+  requireWorkspace(event);
+  return fs.existsSync(biometricPath());
+});
+
+ipcMain.handle('surge:biometric-enroll', async (event, password) => {
+  requireWorkspace(event);
+  if (!safeStorage || !safeStorage.isEncryptionAvailable()) throw new Error('Biometric and credential protection is not available.');
+  if (!password || typeof password !== 'string') throw new Error('Master password is required.');
+  const file = biometricPath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const encrypted = safeStorage.encryptString(password);
+  fs.writeFileSync(file, encrypted);
+  return true;
+});
+
+ipcMain.handle('surge:biometric-unlock', async (event) => {
+  requireWorkspace(event);
+  const file = biometricPath();
+  if (!fs.existsSync(file)) throw new Error('No fingerprint or biometric credential enrolled.');
+  const encrypted = fs.readFileSync(file);
+  return safeStorage.decryptString(encrypted);
+});
+
+ipcMain.handle('surge:biometric-remove', async (event) => {
+  requireWorkspace(event);
+  const file = biometricPath();
+  if (fs.existsSync(file)) fs.unlinkSync(file);
+  return true;
+});
+
 ipcMain.handle('surge:browser-command', async (event, action, payload = {}) => {
   requireChrome(event);
   try {
@@ -326,11 +368,6 @@ ipcMain.handle('surge:browser-command', async (event, action, payload = {}) => {
       case 'stop': tab?.view.webContents.stop(); break;
       case 'workspace': workspace.show(); workspace.focus(); break;
       case 'downloads': workspace.show(); workspace.focus(); workspace.webContents.send('surge:navigate', 'downloads'); break;
-      case 'bookmark': {
-        if (!tab || !webUrl(tab.url)) throw new Error('Open a website before bookmarking it.');
-        workspace.webContents.send('surge:add-bookmark', { title: tab.title, url: tab.url });
-        break;
-      }
       default: throw new Error('Unknown browser action.');
     }
     return state();
