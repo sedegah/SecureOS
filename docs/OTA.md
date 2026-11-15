@@ -6,13 +6,26 @@ The portable USB edition and bootable ISO are deliberately not updated by this m
 ## Release flow
 
 1. Merge and test the Windows application changes.
-2. Create a GitHub Release using a tag such as `v1.1.0` (the existing `v.1.0.0` tag is also understood).
-3. Publish the release.
-4. GitHub Actions checks out that tag, builds the Electron package and .NET storage helper,
-   embeds the package in the custom C# installer, and uploads `Surge-Setup.exe` to that release.
-5. Installed Surge clients query the latest stable GitHub Release. If its version is newer,
+2. Build the installer locally:
+
+   ```powershell
+   node packaging/desktop.cjs
+   Compress-Archive -Path "build/desktop/Surge-win32-x64/*" -DestinationPath "build/app.zip" -CompressionLevel Optimal
+   dotnet publish installer/SurgeInstaller.csproj -c Release -r win-x64 --self-contained true -p:Version=<version> -o build/installer
+   ```
+
+   This builds the Electron package, packs the .NET storage helper, and embeds both in
+   `build/installer/Surge-Setup.exe`.
+
+3. Create a GitHub Release with a tag such as `v1.1.0` (the older `v.1.0.0` form is also
+   understood), attach `Surge-Setup.exe`, and publish it.
+
+   GitHub Actions is not used: the repository's workflows were removed because Actions is
+   locked on this account for a billing problem. Releases are built and attached by hand.
+
+4. Installed Surge clients query the latest stable GitHub Release. If its version is newer,
    they offer the user an update.
-6. After approval, Surge downloads the installer and checks the SHA-256 digest exposed by
+5. After approval, Surge downloads the installer and checks the SHA-256 digest exposed by
    GitHub's Release Assets API. It then launches the installer with the existing installation
    directory preselected.
 
