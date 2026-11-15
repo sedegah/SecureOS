@@ -126,6 +126,7 @@ del ""{batchPath}""
 internal sealed class InstallerWizard : Form
 {
     private int step = 0;
+    private readonly bool updateMode;
     private readonly Panel headerPanel = new();
     private readonly Panel contentPanel = new();
     private readonly Panel footerPanel = new();
@@ -409,6 +410,7 @@ internal sealed class InstallerWizard : Form
         chkStartMenu.AutoSize = true;
 
         chkPortable.Text = "Install as portable mode (self-contained data folder)";
+        chkPortable.Visible = !updateMode;
         chkPortable.Checked = false;
         chkPortable.Location = new Point(30, 155);
         chkPortable.AutoSize = true;
