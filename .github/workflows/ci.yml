@@ -1,0 +1,35 @@
+name: Surge CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  updater-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        run: npm ci --prefix desktop
+
+      - name: Check updater JavaScript syntax
+        run: |
+          node --check desktop/main.cjs
+          node --check desktop/update-service.cjs
+
+      - name: Run updater tests
+        run: node --test tests/updater.test.cjs
