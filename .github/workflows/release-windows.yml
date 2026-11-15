@@ -46,6 +46,9 @@ jobs:
           fi
           echo "SURGE_VERSION=$VERSION" >> "$GITHUB_ENV"
 
+      - name: Stamp the Electron application version
+        run: npm version "${{ env.SURGE_VERSION }}" --no-git-tag-version --prefix desktop
+
       - name: Install Electron build dependencies
         run: npm ci --prefix desktop
 
