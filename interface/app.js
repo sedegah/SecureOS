@@ -76,16 +76,139 @@ function markActiveRoute() {
 }
 
 function navigate(route) {
-  if (route === 'browser' && window.surgeDesktop) {
-    void window.surgeDesktop.openBrowser().catch(reportError);
-    return;
-  }
   location.hash = `#/${route}`;
 }
 
 async function renderBrowserSection(target) {
   clear(target);
   const isDesktop = Boolean(window.surgeDesktop);
+
+  function launchUrl(rawUrl) {
+    let url = (rawUrl || '').trim();
+    if (!url) {
+      if (isDesktop) void window.surgeDesktop.openBrowser().catch(reportError);
+      else window.open('https://duckduckgo.com', '_blank');
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      if (url.includes('.') && !url.includes(' ')) {
+        url = 'https://' + url;
+      } else {
+        url = 'https://duckduckgo.com/?q=' + encodeURIComponent(url);
+      }
+    }
+    if (isDesktop) {
+      void window.surgeDesktop.openBrowser(url).catch(reportError);
+    } else {
+      window.open(url, '_blank');
+    }
+  }
+
+  const urlInput = h('input', {
+    type: 'text',
+    class: 'browser-hub-input',
+    placeholder: 'Search the web or enter address (e.g. duckduckgo.com)...',
+    onKeydown: (e) => {
+      if (e.key === 'Enter') {
+        launchUrl(urlInput.value);
+      }
+    }
+  });
+
+  const launchBtn = h('button', {
+    class: 'btn btn-primary',
+    type: 'button',
+    onClick: () => launchUrl(urlInput.value)
+  }, icon('right'), 'Go');
+
+  const searchBox = h('div', { class: 'browser-search-card' },
+    h('div', { class: 'browser-hub-section-label', text: 'Web Address & Search Launcher' }),
+    h('div', { class: 'browser-search-form' },
+      h('div', { class: 'browser-search-input-wrap' },
+        icon('search'),
+        urlInput
+      ),
+      launchBtn
+    )
+  );
+
+  const quickPills = [
+    { label: 'DuckDuckGo', url: 'https://duckduckgo.com', desc: 'Privacy search' },
+    { label: 'Wikipedia', url: 'https://wikipedia.org', desc: 'Encyclopedia' },
+    { label: 'EFF', url: 'https://www.eff.org', desc: 'Digital rights' },
+    { label: 'Archive.org', url: 'https://archive.org', desc: 'Wayback Machine' },
+    { label: 'GitHub', url: 'https://github.com', desc: 'Code repository' },
+    { label: 'Proton Mail', url: 'https://mail.proton.me', desc: 'Encrypted mail' },
+  ];
+
+  const quickLinksRow = h('div', { class: 'browser-shortcuts-grid' },
+    quickPills.map(item =>
+      h('button', {
+        class: 'browser-shortcut-btn',
+        type: 'button',
+        onClick: () => launchUrl(item.url),
+      },
+        h('div', { class: 'browser-shortcut-icon' }, icon('globe')),
+        h('div', { class: 'browser-shortcut-meta' },
+          h('span', { class: 'browser-shortcut-name', text: item.label }),
+          h('span', { class: 'browser-shortcut-desc', text: item.desc })
+        )
+      )
+    )
+  );
+
+  const features = h('div', { class: 'browser-features-grid' },
+    h('div', { class: 'browser-feature-box' },
+      h('div', { class: 'browser-feature-header' },
+        icon('shield'),
+        h('h3', { text: 'Zero Host Footprint' })
+      ),
+      h('p', { text: 'Browser profiles, cache, session storage, and cookies live exclusively on your secure portable volume, leaving no artifacts on host computers.' })
+    ),
+    h('div', { class: 'browser-feature-box' },
+      h('div', { class: 'browser-feature-header' },
+        icon('globe'),
+        h('h3', { text: 'Sandboxed Chromium Runtime' })
+      ),
+      h('p', { text: 'Runs isolated with multi-process tab sandboxing, strict origin boundaries, and independent GPU rendering decoupled from OS defaults.' })
+    ),
+    h('div', { class: 'browser-feature-box' },
+      h('div', { class: 'browser-feature-header' },
+        icon('lock'),
+        h('h3', { text: 'SOCKS5 & Leak Protection' })
+      ),
+      h('p', { text: 'All navigation adheres to configured proxy tunneling rules, automatically dropping unencrypted traffic when fail-closed kill switch is engaged.' })
+    )
+  );
+
+  const statusBar = h('div', { class: 'browser-status-bar' },
+    h('div', { class: 'browser-status-text' },
+      h('span', { class: 'status-dot online' }),
+      h('span', { text: 'Chromium Engine Ready • Isolated Profile • Direct USB Downloads Active' })
+    ),
+    h('div', { class: 'browser-status-actions' },
+      h('button', {
+        class: 'btn btn-secondary btn-small',
+        type: 'button',
+        onClick: () => { location.hash = '#/vpn'; }
+      }, icon('vpn'), 'Proxy Settings'),
+      h('button', {
+        class: 'btn btn-secondary btn-small',
+        type: 'button',
+        onClick: () => { location.hash = '#/downloads'; }
+      }, icon('downloads'), 'Downloads')
+    )
+  );
+
+  const hubContainer = h('div', { class: 'browser-hub' },
+    searchBox,
+    h('div', { class: 'browser-hub-section-label', text: 'Quick Launch Shortcuts' }),
+    quickLinksRow,
+    h('div', { class: 'browser-hub-section-label', text: 'Privacy & Architecture' }),
+    features,
+    statusBar
+  );
+
   target.append(
     h('header', { class: 'section-head' },
       h('div', {},
@@ -94,17 +217,10 @@ async function renderBrowserSection(target) {
       h('div', { class: 'section-actions' },
         h('button', {
           class: 'btn btn-primary', type: 'button',
-          onClick: () => {
-            if (isDesktop) void window.surgeDesktop.openBrowser().catch(reportError);
-            else window.open('browser/index.html', '_blank');
-          },
+          onClick: () => launchUrl(''),
         }, icon('globe'), isDesktop ? 'Open Browser Window' : 'Launch Browser Window'))),
-    h('div', { class: 'card', style: 'padding: 0; overflow: hidden; height: 620px; border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 6px;' },
-      h('iframe', {
-        src: 'browser/index.html',
-        style: 'width: 100%; height: 100%; border: none; display: block;',
-        title: 'Surge Browser',
-      })));
+    hubContainer
+  );
 }
 
 let routing = Promise.resolve();

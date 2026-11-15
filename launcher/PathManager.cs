@@ -30,6 +30,71 @@ internal sealed class PathManager
     public string SettingsDir => Path.Combine(DataDir, "Settings");
     public string VaultDir => Path.Combine(DataDir, "PasswordVault");
     public string DownloadsDir => Path.Combine(Root, "Downloads");
+    public string DocumentsDir => Path.Combine(Root, "Documents");
+
+    private static readonly HashSet<string> SystemDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Interface", "Browser", "Data", "Licenses", "resources", "locales",
+        "bin", "obj", "node_modules", "packaging", "launcher", "installer", "desktop", "scratch", "build",
+    };
+
+    private static readonly HashSet<string> SystemFiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Surge.exe", "Surge-Setup.exe", "Uninstall.exe", "SurgeOS-Portable.iso",
+        "app.zip", "portable.flag", "installed.flag", "README.txt",
+        "serve.mjs", "package.json", "package-lock.json",
+        "desktop.cjs", "workspace-preload.cjs", "main.cjs", "browser-preload.cjs",
+        "license", "license.txt", "license.rtf"
+    };
+
+    private static readonly HashSet<string> SystemExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".exe", ".dll", ".sys", ".drv", ".com", ".pak", ".bin", ".dat", ".pdb", ".flag", ".node",
+        ".cs", ".csproj", ".sln", ".mjs", ".cjs"
+    };
+
+    public bool IsSystemOrCodeItem(string name, bool isDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return true;
+        if (name.StartsWith('.'))
+            return true;
+        if (isDirectory)
+            return SystemDirectories.Contains(name);
+
+        if (SystemFiles.Contains(name))
+            return true;
+
+        string ext = Path.GetExtension(name);
+        if (!string.IsNullOrEmpty(ext) && SystemExtensions.Contains(ext))
+            return true;
+
+        return false;
+    }
+
+    public bool IsSystemOrCodePath(string fullPath)
+    {
+        string rel = ToRelative(fullPath);
+        if (string.IsNullOrWhiteSpace(rel))
+            return false;
+
+        string[] parts = rel.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+            return false;
+
+        if (SystemDirectories.Contains(parts[0]) || parts.Any(p => p.StartsWith('.')))
+            return true;
+
+        string leaf = parts[^1];
+        if (SystemFiles.Contains(leaf))
+            return true;
+
+        string ext = Path.GetExtension(leaf);
+        if (!string.IsNullOrEmpty(ext) && SystemExtensions.Contains(ext))
+            return true;
+
+        return false;
+    }
 
     public bool UsbPresent => Directory.Exists(Root);
     public bool IsInstalled { get; set; }
@@ -60,7 +125,7 @@ internal sealed class PathManager
         if (!UsbPresent)
             throw new DriveNotFoundException($"The Surge drive is no longer available at {Root}.");
 
-        foreach (string dir in new[] { DataDir, ProfileDir, NotesDir, BookmarksDir, SettingsDir, VaultDir, DownloadsDir })
+        foreach (string dir in new[] { DataDir, ProfileDir, NotesDir, BookmarksDir, SettingsDir, VaultDir, DownloadsDir, DocumentsDir })
             Directory.CreateDirectory(dir);
     }
 

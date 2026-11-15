@@ -38,9 +38,28 @@ async function refresh() {
   render();
 }
 
+const SYSTEM_NAMES = new Set([
+  'interface', 'browser', 'data', 'licenses', 'resources', 'locales',
+  'bin', 'obj', 'node_modules', 'packaging', 'launcher', 'installer', 'desktop', 'build', 'scratch',
+  'surge.exe', 'uninstall.exe', 'surge-setup.exe', 'surgeos-portable.iso',
+  'app.zip', 'serve.mjs', 'package.json', 'package-lock.json', 'readme.txt',
+  'desktop.cjs', 'workspace-preload.cjs', 'main.cjs', 'browser-preload.cjs', 'portable.flag', 'installed.flag'
+]);
+const SYSTEM_EXTS = new Set(['exe', 'dll', 'sys', 'drv', 'pak', 'bin', 'dat', 'pdb', 'flag', 'node', 'cs', 'csproj', 'sln', 'mjs', 'cjs']);
+
+function isSystemEntry(entry) {
+  const name = (entry.name || '').toLowerCase();
+  if (name.startsWith('.')) return true;
+  if (SYSTEM_NAMES.has(name)) return true;
+  if (entry.type !== 'dir' && SYSTEM_EXTS.has((entry.extension || '').toLowerCase())) return true;
+  return false;
+}
+
 function visibleEntries() {
   const needle = filterText.trim().toLowerCase();
-  return listing.entries.filter((entry) => !needle || entry.name.toLowerCase().includes(needle));
+  return listing.entries
+    .filter((entry) => !isSystemEntry(entry))
+    .filter((entry) => !needle || entry.name.toLowerCase().includes(needle));
 }
 
 function selectedEntry() {

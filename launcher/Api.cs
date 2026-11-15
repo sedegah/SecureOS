@@ -364,6 +364,9 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
         if (!allowRoot && fullPath.Equals(paths.Root, StringComparison.OrdinalIgnoreCase))
             throw new FileOperationException("The root folder cannot be modified.", 400);
 
+        if (paths.IsSystemOrCodePath(fullPath))
+            throw new FileOperationException("Access to system files is restricted.", 403);
+
         return fullPath;
     }
 

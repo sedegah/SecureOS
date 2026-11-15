@@ -19,11 +19,15 @@ internal sealed class FileOperations(PathManager paths)
         if (!Directory.Exists(directory))
             throw new FileOperationException("That folder no longer exists on the USB drive.", 404);
 
+        if (paths.IsSystemOrCodePath(directory))
+            throw new FileOperationException("Access to system files is restricted.", 403);
+
         var entries = new JsonArray();
         var dirs = new DirectoryInfo(directory).EnumerateDirectories()
-            .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            .Where(d => !d.Attributes.HasFlag(FileAttributes.ReparsePoint) && !paths.IsSystemOrCodeItem(d.Name, isDirectory: true))
             .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase);
         var files = new DirectoryInfo(directory).EnumerateFiles()
+            .Where(f => !paths.IsSystemOrCodeItem(f.Name, isDirectory: false))
             .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase);
 
         int count = 0;
@@ -63,6 +67,8 @@ internal sealed class FileOperations(PathManager paths)
     public void MakeDirectory(string parent, string name)
     {
         ValidateName(name);
+        if (paths.IsSystemOrCodeItem(name, isDirectory: true))
+            throw new FileOperationException("That folder name is reserved by the system.", 403);
         string target = Path.Combine(parent, name);
         if (Directory.Exists(target) || File.Exists(target))
             throw new FileOperationException("A file or folder with that name already exists.", 409);
@@ -74,6 +80,8 @@ internal sealed class FileOperations(PathManager paths)
         RequireExists(source);
         GuardProtected(source);
         ValidateName(newName);
+        if (paths.IsSystemOrCodeItem(newName, isDirectory: Directory.Exists(source)))
+            throw new FileOperationException("That name is reserved by the system.", 403);
 
         string target = Path.Combine(Path.GetDirectoryName(source)!, newName);
         if (Directory.Exists(target) || File.Exists(target))
@@ -129,12 +137,14 @@ internal sealed class FileOperations(PathManager paths)
     public void Open(string target)
     {
         RequireExists(target);
+        GuardProtected(target);
         Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
     }
 
     public void Reveal(string target)
     {
         RequireExists(target);
+        GuardProtected(target);
         Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{target}\"") { UseShellExecute = true });
     }
 
@@ -153,7 +163,7 @@ internal sealed class FileOperations(PathManager paths)
 
     private void GuardProtected(string target)
     {
-        if (paths.IsProtected(target))
+        if (paths.IsProtected(target) || paths.IsSystemOrCodePath(target))
             throw new FileOperationException("That item is part of Surge itself and cannot be changed here.", 403);
     }
 
