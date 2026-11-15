@@ -27,7 +27,13 @@ internal interface IBrowserControl
 
 internal sealed class Api(PathManager paths, DocumentStore documents, FileOperations files, IBrowserControl browser)
 {
-    public const string Version = "1.0.0";
+    /// <summary>
+    /// Reported to the workspace, so it must follow the assembly version stamped
+    /// at build time (the release tag) instead of a hand-edited constant.
+    /// </summary>
+    public static string Version { get; } =
+        typeof(Api).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+
     private readonly VaultFileStore vaultFiles = new(paths);
 
     public ApiResponse Handle(string method, string path, string? query, byte[] body, Action heartbeat)
@@ -267,6 +273,7 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
             documents.Delete("bookmarks");
             documents.Delete("settings");
             documents.Delete("vpn");
+            documents.Delete("lock");
 
             if (resetVault)
             {

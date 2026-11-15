@@ -1248,6 +1248,83 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
   white-space: pre-wrap;
   word-break: break-all;
 }
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: var(--control-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 11px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.preview-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.preview-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.preview-page-info {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.pdf-viewport {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  gap: 16px;
+  background: #2b2b2b;
+}
+.pdf-canvas {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+  background: #ffffff;
+  max-width: 100%;
+}
+.photo-viewport {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1e1e1e;
+  position: relative;
+  cursor: grab;
+  user-select: none;
+}
+.photo-viewport.panning {
+  cursor: grabbing;
+}
+.photo-img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  transition: transform 0.08s ease-out;
+  transform-origin: center center;
+  pointer-events: none;
+}
+.preview-zoom-badge {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-sub);
+  min-width: 44px;
+  text-align: center;
+}
 
 .vpn-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 8px; align-items: start; }
 .vpn-power { display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -1660,6 +1737,306 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
   gap: 8px;
 }
 
+/* ==========================================================================
+   Settings page
+   Two balanced columns: account and preferences on the left, drive health and
+   maintenance on the right. Card internals share one rhythm so every card
+   starts and ends the same way.
+   ========================================================================== */
+
+.settings-page { min-width: 0; }
+.settings-page .settings-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 14px; }
+.settings-page .settings-col { gap: 14px; }
+
+.settings-page .card { padding: 12px; }
+.settings-page .card > .card-label { margin: -12px -12px 12px; padding: 6px 12px; }
+
+.settings-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; container-type: inline-size; }
+.settings-rows { display: flex; flex-direction: column; }
+
+/* Three equal field columns keep the card's grid honest; the container query
+   collapses them before the labels start fighting for room. */
+.settings-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.settings-fields .field { margin-bottom: 0; }
+
+@container (max-width: 390px) {
+  .settings-fields { grid-template-columns: minmax(0, 1fr); }
+}
+
+.settings-switches { display: flex; flex-direction: column; }
+
+.settings-page .info-row { align-items: baseline; gap: 16px; padding: 6px 0; }
+.settings-page .info-label { flex: 0 1 auto; min-width: 0; }
+.settings-page .info-value { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+/* Closing action strip, aligned to the card's own padding instead of a
+   dialog's negative margins. */
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider);
+}
+
+.settings-actions .btn { min-height: 26px; }
+
+.settings-danger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider);
+}
+
+.settings-danger-quiet { padding-top: 0; border-top: 0; }
+.settings-danger-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-danger-title { font-size: 12px; color: var(--text); }
+.settings-danger-hint { font-size: 11px; line-height: 1.45; color: var(--muted); }
+
+.settings-note { margin: 0; font-size: 11px; line-height: 1.55; color: var(--muted); }
+.settings-note-quiet { opacity: 0.85; }
+
+.settings-page .storage-meter { padding: 0 0 4px; }
+.settings-page .storage-meter-track { height: 10px; }
+.settings-page .storage-meter-meta { font-size: 11px; }
+.settings-page .banner { margin-top: 0; }
+
+.profile-head { display: flex; align-items: center; gap: 12px; }
+.profile-avatar {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid #d8e3f7;
+  background: var(--hover);
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+.profile-meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.profile-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-meta .chip { align-self: flex-start; }
+
+@media (max-width: 1180px) {
+  .settings-page .settings-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ==========================================================================
+   Lock screen & first-run profile
+   ========================================================================== */
+
+body.is-locked { overflow: hidden; }
+
+/* The shell stays hidden while the profile is read, so the workspace never
+   flashes before the lock screen. app.js removes this class once the gate
+   has been decided. */
+body.is-booting { background: #f4f6fa; }
+body.is-booting .app { display: none; }
+
+/* The workspace stays out of the DOM's paint until the gate is passed. */
+body.is-locked .app { display: none; }
+
+.lock-root {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+  background:
+    radial-gradient(1100px 620px at 50% -12%, #e8eefb 0%, rgba(232, 238, 251, 0) 62%),
+    #f4f6fa;
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.lock-card {
+  width: min(432px, 100%);
+  padding: 26px 26px 20px;
+  background: #fff;
+  border: 1px solid var(--divider);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(11, 27, 58, 0.14), 0 2px 6px rgba(11, 27, 58, 0.05);
+}
+
+.lock-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.lock-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  object-fit: contain;
+  flex: none;
+}
+
+.lock-brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+.lock-brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.lock-brand-sub { font-size: 11px; color: var(--muted); }
+
+.lock-identity {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 20px;
+}
+
+.lock-avatar {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid #d8e3f7;
+  background: var(--hover);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.lock-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 30ch;
+}
+
+.lock-sub {
+  margin: 4px 0 0;
+  max-width: 34ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.lock-field { margin-bottom: 14px; }
+
+.lock-input {
+  height: 38px;
+  font-size: 13px;
+}
+
+.lock-error {
+  min-height: 18px;
+  margin: 2px 0 10px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.lock-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.lock-submit {
+  min-height: 38px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lock-skip {
+  min-height: 32px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.lock-skip:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.lock-foot {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.lock-banner { margin-bottom: 18px; }
+
+.lock-strength-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.lock-strength { display: flex; flex: 1; gap: 4px; }
+.lock-strength-bar { height: 3px; flex: 1; border-radius: 2px; background: var(--divider); transition: background 0.15s; }
+.lock-strength-bar.on { background: var(--accent); }
+.lock-strength-label { min-width: 62px; text-align: right; font-size: 11px; color: var(--muted); }
+
+.lock-busy .lock-submit { opacity: 0.7; }
+
+@keyframes lock-shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+.lock-shake .lock-card { animation: lock-shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+
+@media (max-width: 480px) {
+  .lock-card { padding: 20px 20px 16px; border-radius: 14px; }
+  .lock-title { font-size: 17px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
+}
+
+/* ==========================================================================
+   Hidden scrollbars (system-wide)
+   Panes still scroll with the wheel, keyboard, touch and drag — only the bar
+   itself is removed, so every surface stays flush to its edge.
+   ========================================================================== */
+
+* {
+  scrollbar-width: none;      /* Chromium 121+ and Firefox */
+  -ms-overflow-style: none;   /* legacy Edge */
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }

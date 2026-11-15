@@ -9,21 +9,17 @@ const { webUrl, navigationTarget } = require('./navigation.cjs');
 
 function hideRuntimeFiles(targetDir) {
   if (process.platform !== 'win32') return;
-  const hiddenNames = [
-    'chrome_100_percent.pak', 'chrome_200_percent.pak', 'd3dcompiler_47.dll', 'dxcompiler.dll',
-    'electron_wer.dll', 'ffmpeg.dll', 'icudtl.dat', 'LICENSE', 'LICENSES.chromium.html',
-    'resources.pak', 'snapshot_blob.bin', 'v8_context_snapshot.bin', 'version',
-    'vk_swiftshader.dll', 'vk_swiftshader_icd.json', 'vulkan-1.dll', 'portable.flag',
-    'locales', 'resources', 'Interface', 'Licenses', 'assets', 'boot', 'EFI',
-    'autorun.inf', 'autorun.ico'
-  ];
-  for (const name of hiddenNames) {
-    const p = path.join(targetDir, name);
-    if (!fs.existsSync(p)) continue;
-    try {
-      spawn('attrib', ['+h', p], { windowsHide: true });
-    } catch {}
-  }
+  const visible = new Set(['Surge.exe', 'Data', 'Documents', 'Downloads', 'README.txt']);
+  try {
+    const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (visible.has(entry.name)) continue;
+      const p = path.join(targetDir, entry.name);
+      try {
+        spawn('attrib', ['+h', p], { windowsHide: true });
+      } catch {}
+    }
+  } catch {}
 }
 
 const isInstalled = app.isPackaged && !fs.existsSync(path.join(path.dirname(process.execPath), 'portable.flag'));

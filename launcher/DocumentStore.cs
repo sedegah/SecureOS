@@ -8,7 +8,7 @@ internal sealed record DocumentRead(DocumentReadStatus Status, byte[] Data, bool
 
 internal sealed class DocumentStore(PathManager paths)
 {
-    private static readonly string[] Allowed = ["notes", "bookmarks", "settings", "vpn", "vault"];
+    private static readonly string[] Allowed = ["notes", "bookmarks", "settings", "vpn", "vault", "lock"];
 
     public static bool IsAllowed(string name) => Allowed.Contains(name);
 
@@ -18,6 +18,7 @@ internal sealed class DocumentStore(PathManager paths)
         "bookmarks" => Path.Combine(paths.BookmarksDir, "bookmarks.json"),
         "settings" => Path.Combine(paths.SettingsDir, "settings.json"),
         "vpn" => Path.Combine(paths.SettingsDir, "vpn.json"),
+        "lock" => Path.Combine(paths.SettingsDir, "lock.json"),
         "vault" => Path.Combine(paths.VaultDir, "vault.enc"),
         _ => throw new ArgumentException("Unknown document.", nameof(name)),
     };

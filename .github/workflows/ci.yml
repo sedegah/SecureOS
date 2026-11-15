@@ -35,3 +35,6 @@ jobs:
 
       - name: Run updater tests
         run: node --test tests/updater.test.cjs
+
+      - name: Run lock screen credential tests
+        run: node --test tests/lock.test.mjs

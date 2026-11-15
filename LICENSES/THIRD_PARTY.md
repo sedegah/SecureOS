@@ -13,6 +13,17 @@ the Surge source before publishing; nothing in this folder grants rights to Surg
 - Use: Argon2id key derivation for the password vault, running as WebAssembly inside the
   workspace page. The bundle is vendored so the vault works with no internet connection.
 
+## pdf.js
+
+- Files: `interface/vendor/pdf.min.js`, `interface/vendor/pdf.worker.min.js`
+- Version: 3.11.174
+- Author: Mozilla Foundation
+- License: Apache License 2.0 — full text in `pdfjs-Apache-2.0.txt`
+- Source: https://github.com/mozilla/pdf.js
+- Use: Renders PDF previews inside the workspace (Downloads and My Files) without
+  leaving the drive. The bundle is vendored so previews work with no internet
+  connection. The files are unmodified.
+
 ## Mozilla Firefox
 
 - Files: `Browser/FirefoxPortable/App/Firefox64/**` in the packaged USB build (not in this repository)

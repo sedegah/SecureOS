@@ -11,7 +11,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
-    <Version>1.0.0</Version>
+    <Version>1.0.2</Version>
     <Product>Surge Portable</Product>
     <AssemblyTitle>Surge Portable Launcher</AssemblyTitle>
     <Company>Surge</Company>

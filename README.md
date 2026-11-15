@@ -17,6 +17,7 @@ Unplug the drive and everything goes with you.
 | --- | --- |
 | **Surge Browser** | A private browser with tabs, isolated profiles, and all your browsing data stored on your drive |
 | **Encrypted Vault** | A locked password manager and private file vault, protected by a master password you choose |
+| **Lock Screen** | Your name and an optional password before the workspace opens — skip it and Surge opens straight in |
 | **Fingerprint Unlock** | Optionally unlock your vault with your fingerprint or Windows Hello (desktop install only) |
 | **Browser Proxy** | Route your browsing through your own proxy server, with an automatic kill switch if the connection drops |
 | **My Files** | Browse and organise the files on your drive |

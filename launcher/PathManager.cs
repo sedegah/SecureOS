@@ -176,36 +176,28 @@ internal sealed class PathManager
         if (IsReadOnly || !UsbPresent)
             return;
 
-        string[] runtimeItems =
-        [
-            "chrome_100_percent.pak", "chrome_200_percent.pak", "d3dcompiler_47.dll", "dxcompiler.dll",
-            "electron_wer.dll", "ffmpeg.dll", "icudtl.dat", "LICENSE", "LICENSES.chromium.html",
-            "resources.pak", "snapshot_blob.bin", "v8_context_snapshot.bin", "version",
-            "vk_swiftshader.dll", "vk_swiftshader_icd.json", "vulkan-1.dll", "portable.flag",
-            "locales", "resources", "Interface", "Licenses", "assets", "boot", "EFI",
-            "autorun.inf", "autorun.ico"
-        ];
-
-        foreach (string name in runtimeItems)
+        var visible = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            try
+            "Surge.exe", "Data", "Documents", "Downloads", "README.txt"
+        };
+
+        try
+        {
+            var dirInfo = new DirectoryInfo(Root);
+            foreach (var item in dirInfo.EnumerateFileSystemInfos())
             {
-                string path = Path.Combine(Root, name);
-                if (File.Exists(path))
+                if (visible.Contains(item.Name))
+                    continue;
+
+                try
                 {
-                    var attr = File.GetAttributes(path);
-                    if (!attr.HasFlag(FileAttributes.Hidden))
-                        File.SetAttributes(path, attr | FileAttributes.Hidden);
+                    if (!item.Attributes.HasFlag(FileAttributes.Hidden))
+                        item.Attributes |= FileAttributes.Hidden;
                 }
-                else if (Directory.Exists(path))
-                {
-                    var attr = File.GetAttributes(path);
-                    if (!attr.HasFlag(FileAttributes.Hidden))
-                        File.SetAttributes(path, attr | FileAttributes.Hidden);
-                }
+                catch { }
             }
-            catch { }
         }
+        catch { }
     }
 
     public StorageInfo GetStorage()
@@ -263,13 +255,15 @@ internal sealed class PathManager
             }
         }
 
-        if (!IsInstalled && (relative.Contains(':') || relative.StartsWith('/') || relative.StartsWith('\\')))
+        string trimmed = relative.Trim().TrimStart('/', '\\');
+
+        if (!IsInstalled && trimmed.Contains(':'))
         {
             error = "Only paths inside the Surge USB folder are allowed.";
             return false;
         }
 
-        string[] parts = relative.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+        string[] parts = trimmed.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
         if (!IsInstalled && parts.Any(p => p == ".."))
         {
             error = "Paths may not leave the Surge USB folder.";

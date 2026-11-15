@@ -58,24 +58,24 @@ if (Test-Path $bootBin) {
     $fsi.BootImageOptions = $boot
 }
 
+$visibleNames = @('Surge.exe', 'Data', 'Documents', 'Downloads', 'README.txt')
+
+Get-ChildItem -Path $Source -Force | ForEach-Object {
+    if ($visibleNames -notcontains $_.Name) {
+        try {
+            $_.Attributes = $_.Attributes -bor [System.IO.FileAttributes]::Hidden
+        } catch { }
+    }
+}
+
 $fsi.Root.AddTree($Source, $false)
 
-$hiddenNames = @(
-    'chrome_100_percent.pak', 'chrome_200_percent.pak', 'd3dcompiler_47.dll', 'dxcompiler.dll',
-    'electron_wer.dll', 'ffmpeg.dll', 'icudtl.dat', 'LICENSE', 'LICENSES.chromium.html',
-    'resources.pak', 'snapshot_blob.bin', 'v8_context_snapshot.bin', 'version',
-    'vk_swiftshader.dll', 'vk_swiftshader_icd.json', 'vulkan-1.dll', 'portable.flag',
-    'locales', 'resources', 'Interface', 'Licenses', 'assets', 'boot', 'EFI',
-    'autorun.inf', 'autorun.ico'
-)
-
-foreach ($name in $hiddenNames) {
-    try {
-        $item = $fsi.Root.Item($name)
-        if ($null -ne $item) {
+foreach ($item in $fsi.Root) {
+    if ($visibleNames -notcontains $item.Name) {
+        try {
             $item.IsHidden = $true
-        }
-    } catch { }
+        } catch { }
+    }
 }
 
 $resultImage = $fsi.CreateResultImage()

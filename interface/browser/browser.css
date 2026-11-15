@@ -193,3 +193,15 @@ kbd { font: inherit; }
   .status { color: CanvasText; }
 }
 
+
+/* Hide scrollbars in the browser chrome; panes still scroll. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}

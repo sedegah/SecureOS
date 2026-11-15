@@ -1,6 +1,7 @@
 import { api } from './api.js';
 import { h, clear, formatBytes, formatDate, toast, reportError, confirmDialog, emptyState } from './ui.js';
 import { icon } from './icons.js';
+import { isPreviewable, showPreview } from './preview.js';
 
 const RENDER_LIMIT = 200;
 const DOWNLOADS_PATH = 'Downloads';
@@ -29,8 +30,30 @@ async function refresh() {
 }
 
 async function openFile(entry) {
+  const filePath = `${DOWNLOADS_PATH}/${entry.name}`;
+  if (isPreviewable(entry.name)) {
+    try {
+      const blob = await api.readFileBlob(filePath);
+      showPreview({
+        title: entry.name,
+        blob,
+        size: entry.size,
+        onDownload: () => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = entry.name;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        },
+      });
+      return;
+    } catch (error) {
+      reportError(error);
+      return;
+    }
+  }
   try {
-    await api.open(`${DOWNLOADS_PATH}/${entry.name}`);
+    await api.open(filePath);
     toast(`Opened ${entry.name}.`);
   } catch (error) {
     reportError(error);
@@ -73,14 +96,29 @@ function render() {
   clear(container);
   const shown = entries.slice(0, RENDER_LIMIT);
 
-  const rows = shown.map((entry) => h('tr', { class: 'row' },
-    h('td', { class: 'cell-name' }, icon('file', 16), h('span', { text: entry.name })),
-    h('td', { class: 'cell-size', text: formatBytes(entry.size) }),
-    h('td', { class: 'cell-date', text: formatDate(entry.modified) }),
-    h('td', { class: 'cell-actions' },
-      h('button', { class: 'btn btn-small', type: 'button', onClick: () => openFile(entry) }, icon('open', 15), 'Open'),
-      h('button', { class: 'btn btn-small', type: 'button', onClick: () => api.reveal(`${DOWNLOADS_PATH}/${entry.name}`).catch(reportError) }, icon('folderOpen', 15), 'Show in folder'),
-      h('button', { class: 'btn btn-small btn-danger', type: 'button', onClick: () => deleteFile(entry) }, icon('trash', 15), 'Delete'))));
+  const rows = shown.map((entry) => {
+    const previewable = isPreviewable(entry.name);
+    return h('tr', { class: 'row' },
+      h('td', { class: 'cell-name' }, icon(previewable ? 'eye' : 'file', 16), h('span', { text: entry.name })),
+      h('td', { class: 'cell-size', text: formatBytes(entry.size) }),
+      h('td', { class: 'cell-date', text: formatDate(entry.modified) }),
+      h('td', { class: 'cell-actions' },
+        h('button', {
+          class: 'btn btn-small',
+          type: 'button',
+          onClick: () => openFile(entry)
+        }, icon(previewable ? 'eye' : 'open', 15), previewable ? 'Preview' : 'Open'),
+        h('button', {
+          class: 'btn btn-small',
+          type: 'button',
+          onClick: () => api.reveal(`${DOWNLOADS_PATH}/${entry.name}`).catch(reportError)
+        }, icon('folderOpen', 15), 'Show in folder'),
+        h('button', {
+          class: 'btn btn-small btn-danger',
+          type: 'button',
+          onClick: () => deleteFile(entry)
+        }, icon('trash', 15), 'Delete')));
+  });
 
   container.append(
     h('header', { class: 'section-head' },

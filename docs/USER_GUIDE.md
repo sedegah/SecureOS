@@ -6,6 +6,7 @@ This guide is for using a Surge drive. If you want to build one from source, see
 ## Contents
 
 - [Starting Surge](#starting-surge)
+- [Lock screen and profile](#lock-screen-and-profile)
 - [The homepage](#the-homepage)
 - [My Files](#my-files)
 - [My Notes](#my-notes)
@@ -29,6 +30,29 @@ You do not need internet to open Surge or to use Notes, Files, Bookmarks or Pass
 You only need internet to load websites.
 
 If Surge is already open, running `Surge.exe` again will not start a second copy.
+
+## Lock screen and profile
+
+The first time Surge starts on a new drive it asks for two things:
+
+- **Your name** — shown on the lock screen, and used to greet you.
+- **A password** — optional.
+
+If you set a password, Surge asks for it every time the workspace opens. The password is
+turned into a key with Argon2id and is never written to the drive in readable form, so
+nobody can read it off the drive. It also cannot be recovered — if you forget it, use
+**Forgot password?** on the lock screen to remove the lock and set a new one.
+
+If you would rather not use a password, choose **Continue without a password** at setup,
+or leave the password off in Settings. Surge then opens straight into the workspace and
+never asks for a password.
+
+Change any of this later in **Settings → Profile & lock screen**: add, change or remove the
+password, rename the profile, or lock the workspace immediately with **Lock now**.
+
+The lock screen is a curtain, not a lockbox. It keeps someone who picks up the drive from
+browsing your workspace, but it does not encrypt your notes, bookmarks or files. Only the
+password vault encrypts what it holds.
 
 ## The homepage
 
@@ -143,6 +167,8 @@ up with two competing password stores.
 
 ## Settings
 
+- **Profile & lock screen** — your name on the lock screen, and whether Surge asks for a
+  password when the workspace opens.
 - **Theme** — dark, light, or follow the computer's setting.
 - **Search engine** — which service the homepage search box uses.
 - **Vault auto-lock** — how long the vault waits before locking itself.

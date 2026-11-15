@@ -7,6 +7,7 @@ import * as files from './modules/files.js';
 import * as downloads from './modules/downloads.js';
 import * as passwords from './modules/passwords.js';
 import * as vpn from './modules/vpn.js';
+import { guardWorkspace, forgetKey } from './modules/lock.js';
 
 if (typeof window !== 'undefined' && window.location.hostname === '127.0.0.1') {
   const target = new URL(window.location.href);
@@ -451,12 +452,24 @@ function renderFatal(message) {
 }
 
 async function boot() {
-  buildNav();
   const token = initSession();
   if (!token) {
     renderFatal('This page must be opened by Surge.exe from the USB drive. Double-click Surge.exe in the SURGE folder to start your workspace.');
     return;
   }
+
+  // Nothing below this line runs until the drive owner is past the lock screen
+  // (or straight away when this profile has no password).
+  try {
+    await guardWorkspace();
+  } catch (error) {
+    document.body.classList.remove('is-booting');
+    renderFatal(error?.message ?? 'The lock screen could not be read from this drive.');
+    return;
+  }
+  document.body.classList.remove('is-booting');
+
+  buildNav();
 
   try {
     await Promise.all([settings.loadSettings(), notes.loadNotes()]);
@@ -481,7 +494,7 @@ async function boot() {
     if (ROUTES.some((entry) => entry.id === destination)) navigate(destination);
   });
   window.addEventListener('hashchange', () => { void route(); });
-  window.addEventListener('beforeunload', () => { passwords.lock(); void notes.flushPendingSave().catch(() => {}); });
+  window.addEventListener('beforeunload', () => { passwords.lock(); forgetKey(); void notes.flushPendingSave().catch(() => {}); });
 
   initClock();
   await refreshStatus();
