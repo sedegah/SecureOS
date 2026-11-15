@@ -153,7 +153,7 @@ internal sealed class InstallerWizard : Form
 
     private string TargetDirectory => txtPath.Text.Trim();
 
-    public InstallerWizard()
+    public InstallerWizard(string? initialDirectory = null)
     {
         Text = "Surge Setup";
         Size = new Size(660, 560);
@@ -163,6 +163,9 @@ internal sealed class InstallerWizard : Form
         MinimizeBox = true;
         Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
         BackColor = Color.FromArgb(245, 247, 250);
+
+        updateMode = !string.IsNullOrWhiteSpace(initialDirectory);
+        if (updateMode) txtPath.Text = initialDirectory!;
 
         LoadEmbeddedAssets();
         if (appIcon is not null) Icon = appIcon;
