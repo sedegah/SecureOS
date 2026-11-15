@@ -1,6 +1,6 @@
 # Surge Workspace & Browser
 
-Your browser and your personal workspace, together on one USB drive — or installed on your computer.
+Your browser and your personal workspace, together on one USB drive or installed on your computer.
 
 Plug the drive into any Windows computer, open **Surge.exe**, and you have a full workspace with a private browser, encrypted password vault, notes, file manager, and proxy protection. Nothing is installed on the computer, no admin rights are needed, and no account or sign-in is required.
 
