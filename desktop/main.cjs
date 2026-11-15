@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
+const { createUpdateService } = require('./update-service.cjs');
 const { webUrl, navigationTarget } = require('./navigation.cjs');
 
 const isInstalled = app.isPackaged && !fs.existsSync(path.join(path.dirname(process.execPath), 'portable.flag'));
@@ -219,6 +220,71 @@ async function openBrowser(url = '') {
   return { ok: true };
 }
 
+
+async function checkForInstalledUpdate() {
+  if (!app.isPackaged || !isInstalled || quitting) return;
+  const updates = createUpdateService({ app });
+  try {
+    const update = await updates.checkForUpdate();
+    if (!update || quitting || !workspace || workspace.isDestroyed()) return;
+
+    const choice = await dialog.showMessageBox(workspace, {
+      type: 'info',
+      title: 'Surge update available',
+      message: `Surge ${update.version} is available.`,
+      detail: 'Would you like to download and install this update now? Your vault, notes, browser profile and workspace data will be preserved.',
+      buttons: ['Download and install', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (choice.response !== 0 || quitting) return;
+
+    const installer = await updates.downloadInstaller(update);
+    if (quitting) return;
+
+    const ready = await dialog.showMessageBox(workspace, {
+      type: 'info',
+      title: 'Update ready to install',
+      message: `Surge ${update.version} has been downloaded and verified.`,
+      detail: 'Surge will close and the installer will update your existing installation. Your personal data is stored separately and will not be removed.',
+      buttons: ['Restart and install', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (ready.response !== 0) return;
+
+    const installDirectory = path.dirname(process.execPath);
+    const child = spawn(installer, [
+      '--update-directory', installDirectory,
+      '--wait-pid', String(process.pid),
+    ], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.once('error', error => {
+      if (!quitting) dialog.showErrorBox('Could not start Surge Setup', error.message);
+    });
+    child.unref();
+    app.quit();
+  } catch (error) {
+    if (!quitting && workspace && !workspace.isDestroyed()) {
+      const choice = await dialog.showMessageBox(workspace, {
+        type: 'warning',
+        title: 'Could not check for Surge updates',
+        message: 'Surge could not complete its update check.',
+        detail: error.message,
+        buttons: ['OK', 'Open releases'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      if (choice.response === 1) {
+        const { shell } = require('electron');
+        await shell.openExternal('https://github.com/sedegah/SurgeOS/releases');
+      }
+    }
+  }
+}
+
 function installDownloads() {
   browserSession.on('will-download', (_event, item) => {
     const directory = path.join(root, 'Downloads');
@@ -428,6 +494,7 @@ else {
       workspace.show();
       workspace.focus();
       if (splash && !splash.isDestroyed()) splash.close();
+      setTimeout(() => { void checkForInstalledUpdate(); }, 2500);
     }, 1200);
   }).catch(error => { dialog.showErrorBox('Surge could not start', error.message); app.quit(); });
 }
