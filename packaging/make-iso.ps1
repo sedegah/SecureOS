@@ -60,6 +60,24 @@ if (Test-Path $bootBin) {
 
 $fsi.Root.AddTree($Source, $false)
 
+$hiddenNames = @(
+    'chrome_100_percent.pak', 'chrome_200_percent.pak', 'd3dcompiler_47.dll', 'dxcompiler.dll',
+    'electron_wer.dll', 'ffmpeg.dll', 'icudtl.dat', 'LICENSE', 'LICENSES.chromium.html',
+    'resources.pak', 'snapshot_blob.bin', 'v8_context_snapshot.bin', 'version',
+    'vk_swiftshader.dll', 'vk_swiftshader_icd.json', 'vulkan-1.dll', 'portable.flag',
+    'locales', 'resources', 'Interface', 'Licenses', 'assets', 'boot', 'EFI',
+    'autorun.inf', 'autorun.ico'
+)
+
+foreach ($name in $hiddenNames) {
+    try {
+        $item = $fsi.Root.Item($name)
+        if ($null -ne $item) {
+            $item.IsHidden = $true
+        }
+    } catch { }
+}
+
 $resultImage = $fsi.CreateResultImage()
 $imageStream = $resultImage.ImageStream
 

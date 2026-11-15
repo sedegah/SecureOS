@@ -21,17 +21,17 @@ internal sealed class PathManager
 
     public string Root { get; }
     public bool IsReadOnly { get; private set; }
-    public string WritableRoot => IsReadOnly ? Path.Combine(Path.GetTempPath(), "Surge_Session_" + Environment.UserName) : Root;
+    public string WritableRoot => Root;
     public string BrowserDir => Path.Combine(Root, "Browser");
     public string InterfaceDir => Path.Combine(Root, "Interface");
-    public string DataDir => Path.Combine(WritableRoot, "Data");
+    public string DataDir => Path.Combine(Root, "Data");
     public string ProfileDir => Path.Combine(DataDir, "Profile");
     public string NotesDir => Path.Combine(DataDir, "Notes");
     public string BookmarksDir => Path.Combine(DataDir, "Bookmarks");
     public string SettingsDir => Path.Combine(DataDir, "Settings");
     public string VaultDir => Path.Combine(DataDir, "PasswordVault");
-    public string DownloadsDir => IsReadOnly ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads") : Path.Combine(Root, "Downloads");
-    public string DocumentsDir => IsReadOnly ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)) : Path.Combine(Root, "Documents");
+    public string DownloadsDir => Path.Combine(Root, "Downloads");
+    public string DocumentsDir => Path.Combine(Root, "Documents");
 
     private static readonly HashSet<string> SystemDirectories = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -167,6 +167,45 @@ internal sealed class PathManager
         catch (UnauthorizedAccessException)
         {
         }
+
+        HideRuntimeFiles();
+    }
+
+    public void HideRuntimeFiles()
+    {
+        if (IsReadOnly || !UsbPresent)
+            return;
+
+        string[] runtimeItems =
+        [
+            "chrome_100_percent.pak", "chrome_200_percent.pak", "d3dcompiler_47.dll", "dxcompiler.dll",
+            "electron_wer.dll", "ffmpeg.dll", "icudtl.dat", "LICENSE", "LICENSES.chromium.html",
+            "resources.pak", "snapshot_blob.bin", "v8_context_snapshot.bin", "version",
+            "vk_swiftshader.dll", "vk_swiftshader_icd.json", "vulkan-1.dll", "portable.flag",
+            "locales", "resources", "Interface", "Licenses", "assets", "boot", "EFI",
+            "autorun.inf", "autorun.ico"
+        ];
+
+        foreach (string name in runtimeItems)
+        {
+            try
+            {
+                string path = Path.Combine(Root, name);
+                if (File.Exists(path))
+                {
+                    var attr = File.GetAttributes(path);
+                    if (!attr.HasFlag(FileAttributes.Hidden))
+                        File.SetAttributes(path, attr | FileAttributes.Hidden);
+                }
+                else if (Directory.Exists(path))
+                {
+                    var attr = File.GetAttributes(path);
+                    if (!attr.HasFlag(FileAttributes.Hidden))
+                        File.SetAttributes(path, attr | FileAttributes.Hidden);
+                }
+            }
+            catch { }
+        }
     }
 
     public StorageInfo GetStorage()
@@ -238,8 +277,9 @@ internal sealed class PathManager
         }
 
         string candidate = Path.GetFullPath(Path.Combine(Root, Path.Combine(parts)));
+        string rootPrefix = Root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!IsInstalled && !candidate.Equals(Root, StringComparison.OrdinalIgnoreCase) &&
-            !candidate.StartsWith(Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            !candidate.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
         {
             error = "Paths may not leave the Surge USB folder.";
             return false;

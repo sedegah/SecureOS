@@ -87,6 +87,8 @@ export async function mount(target) {
     [10, 20, 30, 60].map((value) => ({ value, label: `${value} seconds` })),
     settings.clipboardClearSeconds, 'Surge clears the clipboard only while this workspace tab stays open.');
 
+  const persist = (patch) => updateSettings(patch).catch(reportError);
+
   const save = h('button', { class: 'btn btn-primary', type: 'button' }, icon('save'), 'Save preferences');
   save.addEventListener('click', async () => {
     try {
@@ -101,20 +103,43 @@ export async function mount(target) {
     }
   });
 
-  const persist = (patch) => updateSettings(patch).catch(reportError);
-
   const storage = status?.storage;
+  const usedPercent = storage && storage.total > 0 ? Math.min(100, Math.max(1, Math.round((storage.used / storage.total) * 100))) : 0;
+  const storageClass = storage?.critical ? 'crit' : (storage?.low ? 'warn' : '');
+
+  const storageMeter = storage ? h('div', { class: 'storage-meter' },
+    h('div', { class: 'storage-meter-track' },
+      h('div', { class: `storage-meter-fill ${storageClass}`.trim(), style: `width: ${usedPercent}%` })),
+    h('div', { class: 'storage-meter-meta' },
+      h('span', { text: `${formatBytes(storage.used)} used of ${formatBytes(storage.total)} (${usedPercent}%)` }),
+      h('span', { text: `${formatBytes(storage.free)} available` }))) : null;
+
+  const resetBtn = h('button', { class: 'btn btn-danger', type: 'button' }, icon('refresh'), 'Reset environment');
+  resetBtn.addEventListener('click', async () => {
+    const confirmed = await confirmDialog({
+      title: 'Reset Surge Environment',
+      message: 'This will restore your workspace settings to defaults and remove saved notes, bookmarks, and preferences. Encrypted vault credentials will remain safe. Do you want to proceed?',
+      confirmLabel: 'Reset environment',
+      danger: true,
+    });
+    if (!confirmed) return;
+    try {
+      await api.systemReset({ resetVault: false });
+      toast('Workspace environment reset successfully.');
+      setTimeout(() => location.reload(), 1200);
+    } catch (err) {
+      reportError(err);
+    }
+  });
+
   target.append(
     h('header', { class: 'section-head' },
-      h('div', {}, h('h1', { text: 'Settings' }), h('p', { class: 'section-sub', text: 'Workspace preferences' }))),
+      h('div', {}, h('h1', { text: 'Settings' }), h('p', { class: 'section-sub', text: 'Workspace preferences and system health' }))),
     h('div', { class: 'settings-grid' },
       h('div', { class: 'settings-col' },
         h('section', { class: 'card' },
-          cardLabel('Workspace'),
+          cardLabel('Workspace & Security'),
           engine, lock, clipboard,
-          h('div', { class: 'dialog-actions' }, save)),
-        h('section', { class: 'card' },
-          cardLabel('Storage'),
           switchRow({
             label: 'Warn below 1 GB free',
             checked: Boolean(settings.warnLowSpace),
@@ -125,55 +150,32 @@ export async function mount(target) {
             checked: Boolean(settings.warnCriticalSpace),
             onChange: (value) => persist({ warnCriticalSpace: value }),
           }),
-          infoRow('Downloads folder', 'SURGE/Downloads'))),
+          h('div', { class: 'dialog-actions', style: 'margin-top: 10px;' }, save)),
+        h('section', { class: 'card' },
+          cardLabel('System Maintenance'),
+          h('p', { class: 'hint', text: 'Restore Surge to its initial factory clean state. Clears saved notes, bookmarks, preferences, and session cache while preserving encrypted vault entries.' }),
+          h('div', { class: 'maintenance-panel' },
+            h('div', { class: 'maintenance-actions' },
+              h('span', { class: 'info-label', text: 'Requires confirmation before execution' }),
+              resetBtn)),
+          h('div', { class: 'banner banner-info', style: 'margin-top: 12px;' }, icon('warning'),
+            h('div', {},
+              h('strong', { text: 'Before you unplug' }),
+              h('p', { text: 'Close Surge Browser and Surge before safely removing hardware in Windows to protect against data loss.' }))))),
       h('div', { class: 'settings-col' },
         h('section', { class: 'card' },
-          cardLabel('Browser'),
-          infoRow('Browser', 'Surge Browser'),
-          infoRow('Rendering engine', 'Chromium'),
-          infoRow('Password storage', 'Surge encrypted vault only'),
-          h('p', { class: 'hint', text: 'Websites open in a separate Surge Browser window. They cannot access workspace tools or your vault.' })),
-
+          cardLabel('Portable Storage & Health'),
+          storageMeter,
+          infoRow('Surge folder', status?.usbRoot ?? 'Unavailable'),
+          infoRow('Downloads folder', 'SURGE/Downloads'),
+          infoRow('Password vault', 'Data/PasswordVault/vault.enc (encrypted)'),
+          infoRow('Notes & bookmarks', 'Data/Notes & Data/Bookmarks'),
+          infoRow('Browser profile', 'Data/BrowserProfile (on this volume)')),
         h('section', { class: 'card' },
-          cardLabel('About'),
-          h('p', { text: 'Surge Portable 1.0' }),
-          h('p', { class: 'muted', text: '16GB edition · Windows 10 / 11 · No installation' })))),
-    h('section', { class: 'card' },
-      cardLabel('This USB drive'),
-      infoRow('Surge version', status?.version ?? '1.0.0'),
-      infoRow('Surge folder', status?.usbRoot ?? 'Unavailable'),
-      infoRow('Browser profile', 'Data/BrowserProfile (on this USB)'),
-      infoRow('Notes', 'Data/Notes/notes.json'),
-      infoRow('Bookmarks', 'Data/Bookmarks/bookmarks.json'),
-      infoRow('Password vault', 'Data/PasswordVault/vault.enc (encrypted)'),
-      storage ? infoRow('Storage', `${formatBytes(storage.used)} used of ${formatBytes(storage.total)} • ${formatBytes(storage.free)} free`) : null),
-    h('section', { class: 'card' },
-      cardLabel('Environment Reset'),
-      h('p', { text: 'Restore Surge to factory default state. This clears notes, bookmarks, custom preferences, and cached session data. Your encrypted password vault is preserved.' }),
-      h('div', { class: 'dialog-actions', style: 'margin-top: 14px; justify-content: flex-start;' },
-        (() => {
-          const resetBtn = h('button', { class: 'btn btn-danger', type: 'button' }, icon('refresh'), 'Reset environment');
-          resetBtn.addEventListener('click', async () => {
-            const confirmed = await confirmDialog({
-              title: 'Reset Surge Environment',
-              message: 'This will restore your workspace settings to defaults and remove saved notes and bookmarks. Encrypted vault credentials will remain safe. Do you want to proceed?',
-              confirmLabel: 'Reset environment',
-              danger: true,
-            });
-            if (!confirmed) return;
-            try {
-              await api.systemReset({ resetVault: false });
-              toast('Workspace environment reset successfully.');
-              setTimeout(() => location.reload(), 1200);
-            } catch (err) {
-              reportError(err);
-            }
-          });
-          return resetBtn;
-        })())),
-    h('div', { class: 'banner banner-info' }, icon('warning'),
-      h('div', {},
-        h('strong', { text: 'Before you unplug' }),
-        h('p', { text: 'Close Surge Browser and Surge, wait for saving to finish, then use "Safely Remove Hardware" in Windows. Pulling the USB out while Surge is writing can damage notes, bookmarks or the vault.' }))),
-    h('p', { class: 'hint', text: 'Surge keeps your data on this USB drive, but Windows, antivirus software and websites may still leave their own traces on the computer you use. Surge is not a zero-trace or anonymity tool.' }));
+          cardLabel('Browser Runtime & Architecture'),
+          infoRow('Application', `${status?.app ?? 'Surge'} ${status?.version ?? '1.0.0'}`),
+          infoRow('Browser engine', 'Independent sandboxed Chromium'),
+          infoRow('Password storage', 'Surge encrypted vault only'),
+          infoRow('Host footprint', 'Zero host traces on computer'),
+          h('p', { class: 'hint', style: 'margin-top: 10px;', text: 'Websites open in an isolated Chromium process boundary. They cannot access workspace tools, private files, or vault credentials.' })))));
 }

@@ -7,6 +7,25 @@ const { randomUUID } = require('node:crypto');
 const { createUpdateService } = require('./update-service.cjs');
 const { webUrl, navigationTarget } = require('./navigation.cjs');
 
+function hideRuntimeFiles(targetDir) {
+  if (process.platform !== 'win32') return;
+  const hiddenNames = [
+    'chrome_100_percent.pak', 'chrome_200_percent.pak', 'd3dcompiler_47.dll', 'dxcompiler.dll',
+    'electron_wer.dll', 'ffmpeg.dll', 'icudtl.dat', 'LICENSE', 'LICENSES.chromium.html',
+    'resources.pak', 'snapshot_blob.bin', 'v8_context_snapshot.bin', 'version',
+    'vk_swiftshader.dll', 'vk_swiftshader_icd.json', 'vulkan-1.dll', 'portable.flag',
+    'locales', 'resources', 'Interface', 'Licenses', 'assets', 'boot', 'EFI',
+    'autorun.inf', 'autorun.ico'
+  ];
+  for (const name of hiddenNames) {
+    const p = path.join(targetDir, name);
+    if (!fs.existsSync(p)) continue;
+    try {
+      spawn('attrib', ['+h', p], { windowsHide: true });
+    } catch {}
+  }
+}
+
 const isInstalled = app.isPackaged && !fs.existsSync(path.join(path.dirname(process.execPath), 'portable.flag'));
 let root;
 if (!app.isPackaged) {
@@ -22,6 +41,7 @@ if (!app.isPackaged) {
   }
 } else {
   const candidate = path.dirname(process.execPath);
+  hideRuntimeFiles(candidate);
   let isReadOnly = false;
   try {
     const probe = path.join(candidate, '.write_test');
@@ -42,6 +62,9 @@ if (!app.isPackaged) {
   }
 }
 if (!fs.existsSync(root)) throw new Error('The Surge workspace is missing.');
+fs.mkdirSync(path.join(root, 'Data'), { recursive: true });
+fs.mkdirSync(path.join(root, 'Downloads'), { recursive: true });
+fs.mkdirSync(path.join(root, 'Documents'), { recursive: true });
 const profile = path.join(root, 'Data', 'BrowserProfile');
 fs.mkdirSync(profile, { recursive: true });
 app.setPath('userData', profile);
@@ -284,13 +307,13 @@ async function checkForInstalledUpdate() {
     child.unref();
     app.quit();
   } catch {
-    // Update checks are best-effort; network failures must not interrupt startup.
   }
 }
 
 function installDownloads() {
   browserSession.on('will-download', (_event, item) => {
     const directory = path.join(root, 'Downloads');
+    fs.mkdirSync(directory, { recursive: true });
     if (!fs.existsSync(root) || !fs.existsSync(directory) || fs.lstatSync(directory).isSymbolicLink()) { item.cancel(); return; }
     let name = path.basename(item.getFilename()).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/g, '').slice(0, 180);
     if (!name || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\.|$)/i.test(name)) name = 'download';
