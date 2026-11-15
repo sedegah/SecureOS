@@ -23,6 +23,8 @@
   <ItemGroup>
     <EmbeddedResource Include="..\build\app.zip" LogicalName="app.zip" />
     <EmbeddedResource Include="..\desktop\assets\splash.jpg" LogicalName="splash.jpg" />
+    <EmbeddedResource Include="..\desktop\assets\surge-logo.jpg" LogicalName="logo.jpg" />
+    <EmbeddedResource Include="..\desktop\assets\icon.png" LogicalName="icon.png" />
     <EmbeddedResource Include="..\desktop\assets\icon.ico" LogicalName="icon.ico" />
   </ItemGroup>
 
