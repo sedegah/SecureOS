@@ -268,6 +268,7 @@ async function checkForInstalledUpdate() {
   } catch {
     // Update checks are best-effort; network failures must not interrupt startup.
   }
+}
 
 function installDownloads() {
   browserSession.on('will-download', (_event, item) => {
