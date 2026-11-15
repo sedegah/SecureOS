@@ -40,6 +40,24 @@ $fsi.VolumeName = $VolumeLabel
 $fsi.ChooseImageDefaultsForMediaType(6)
 $fsi.FileSystemsToCreate = 7
 
+$bootBin = "C:\Windows\Boot\DVD\EFI\en-US\efisys.bin"
+if (-not (Test-Path $bootBin)) {
+    $bootBin = "C:\Windows\Boot\DVD\EFI\en-US\efisys_noprompt.bin"
+}
+if (Test-Path $bootBin) {
+    $boot = New-Object -ComObject IMAPI2FS.BootOptions
+    $bootStream = New-Object -ComObject ADODB.Stream
+    $bootStream.Type = 1
+    $bootStream.Open()
+    $bytes = [System.IO.File]::ReadAllBytes($bootBin)
+    $bootStream.Write($bytes)
+    $bootStream.Position = 0
+    $boot.AssignBootImage($bootStream)
+    $boot.PlatformId = 0xEF
+    $boot.Emulation = 0
+    $fsi.BootImageOptions = $boot
+}
+
 $fsi.Root.AddTree($Source, $false)
 
 $resultImage = $fsi.CreateResultImage()
