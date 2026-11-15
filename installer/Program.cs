@@ -199,17 +199,24 @@ internal sealed class InstallerWizard : Form
         contentPanel.Dock = DockStyle.Fill;
         contentPanel.Padding = new Padding(30, 20, 30, 20);
 
+        // WinForms docks controls in reverse z-order (last added = highest z = docked first).
+        // Footer (Bottom) must dock first, then Header (Top), then Content (Fill) gets the remainder.
+        SuspendLayout();
         Controls.Add(contentPanel);
         Controls.Add(headerPanel);
         Controls.Add(footerPanel);
+        ResumeLayout(true);
     }
 
     private void ShowStep(int index)
     {
         step = index;
         contentPanel.Controls.Clear();
+        btnCancel.Visible = true;
+        btnBack.Visible = true;
         btnBack.Enabled = step > 0 && step < 3;
         btnNext.Enabled = true;
+        btnNext.Location = new Point(420, 14);
 
         switch (step)
         {
