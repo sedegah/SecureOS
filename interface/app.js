@@ -255,11 +255,21 @@ async function applyRoute() {
   main.removeAttribute('aria-busy');
 }
 
+function initClock() {
+  const clockEl = document.getElementById('status-clock');
+  if (!clockEl) return;
+  const update = () => {
+    const now = new Date();
+    clockEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+  update();
+  setInterval(update, 1000);
+}
+
 function updateStorage(status) {
   const storage = status?.storage;
   const block = document.getElementById('storage');
   const chip = document.getElementById('usb-chip');
-  document.getElementById('status-path').textContent = status?.usbRoot ?? '';
   const label = document.getElementById('storage-label');
   if (label) label.textContent = status?.installed ? 'Disk' : 'USB';
 
@@ -473,6 +483,7 @@ async function boot() {
   window.addEventListener('hashchange', () => { void route(); });
   window.addEventListener('beforeunload', () => { passwords.lock(); void notes.flushPendingSave().catch(() => {}); });
 
+  initClock();
   await refreshStatus();
   setInterval(() => { void refreshStatus(); }, 20000);
   await route();

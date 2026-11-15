@@ -4,6 +4,7 @@ import { icon } from './icons.js';
 import { getSettings } from './settings.js';
 import { createVault, unlockVault, sealVault, masterPasswordStrength, MIN_MASTER_LENGTH, VaultError, MAX_VAULT_FILE_BYTES, encryptVaultFile, decryptVaultFile } from './vault-crypto.js';
 import { isFingerprintSensorAvailable, isFingerprintEnrolled, removeFingerprintEnrollment, enrollFingerprint, unlockWithFingerprint } from './fingerprint.js';
+import { isPreviewable, showPreview } from './preview.js';
 
 let container = null;
 let hasSensor = false;
@@ -16,6 +17,7 @@ let vaultFiles = [];
 let fileBusy = false;
 let selectedId = null;
 let query = '';
+let activeTab = 'passwords';
 let errorMessage = '';
 let revealed = new Set();
 let lastActivity = Date.now();
@@ -82,6 +84,7 @@ export function lock() {
   selectedId = null;
   revealed = new Set();
   unlockTime = 0;
+  activeTab = 'passwords';
   void clearClipboard();
   if (state !== 'unknown' && state !== 'corrupt') {
     state = envelope ? 'locked' : 'no-vault';

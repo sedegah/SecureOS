@@ -1,6 +1,7 @@
 import { api, joinPath, parentPath } from './api.js';
 import { h, clear, formatBytes, formatDate, toast, reportError, confirmDialog, promptDialog, emptyState } from './ui.js';
 import { icon } from './icons.js';
+import { isPreviewable, showPreview } from './preview.js';
 
 const EXECUTABLE_EXTENSIONS = new Set(['exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'ps1', 'vbs', 'js', 'jse', 'wsf', 'lnk', 'pif', 'hta', 'reg']);
 const RENDER_LIMIT = 400;
@@ -82,6 +83,22 @@ async function activate(entry) {
 
 async function openEntry(entry) {
   const path = entryPath(entry);
+  if (entry.type !== 'dir' && isPreviewable(entry.name || entry.extension)) {
+    try {
+      const blob = await api.readFileBlob(path);
+      showPreview({
+        title: entry.name,
+        blob,
+        ext: entry.extension,
+        size: entry.size,
+      });
+      return;
+    } catch (error) {
+      reportError(error);
+      return;
+    }
+  }
+
   if (EXECUTABLE_EXTENSIONS.has(entry.extension)) {
     const ok = await confirmDialog({
       title: 'Run this file?',
