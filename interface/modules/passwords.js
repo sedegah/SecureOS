@@ -268,16 +268,19 @@ function encryptedFilesView() {
 
   const tableHead = h('thead', {},
     h('tr', {},
-      h('th', { style: 'width: 40px;' }, ''),
       h('th', { text: 'Name' }),
-      h('th', { style: 'width: 120px;', text: 'Size' }),
-      h('th', { style: 'width: 220px; text-align: right;', text: 'Actions' })));
+      h('th', { style: 'width: 140px;', text: 'Type' }),
+      h('th', { style: 'width: 100px;', text: 'Size' }),
+      h('th', { style: 'width: 250px; text-align: right;', text: 'Actions' })));
 
   const tableBody = h('tbody', {},
     vaultFiles.map((file) => {
       const ext = (file.name.includes('.') ? file.name.split('.').pop() : '').toLowerCase();
       const canPreview = isPreviewable(ext);
       const fileIcon = ext === 'pdf' ? 'file' : ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext) ? 'eye' : 'file';
+      const typeLabel = ext === 'pdf' ? 'PDF Document'
+        : ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext) ? 'Image'
+        : ext ? `${ext.toUpperCase()} File` : 'Encrypted File';
 
       const previewBtn = canPreview ? h('button', {
         class: 'btn btn-small',
@@ -306,13 +309,14 @@ function encryptedFilesView() {
           if (canPreview) void previewVaultFile(file);
         },
       },
-      h('td', { class: 'vault-file-icon-cell' }, icon(fileIcon, 18)),
       h('td', { class: 'vault-file-name-cell' },
-        h('span', { class: 'vault-file-name', text: file.name }),
-        canPreview ? h('span', { class: 'chip chip-quiet chip-inline', text: ext.toUpperCase() }) : null),
+        icon(fileIcon, 16),
+        h('span', { class: 'vault-file-name', text: file.name })),
+      h('td', { class: 'vault-file-type-cell' },
+        h('span', { class: 'chip chip-quiet chip-inline', text: typeLabel })),
       h('td', { class: 'vault-file-size-cell mono', text: formatBytes(file.size) }),
       h('td', { class: 'vault-file-actions-cell' },
-        h('div', { class: 'section-actions', style: 'justify-content: flex-end;' }, previewBtn, exportBtn, deleteBtn)));
+        h('div', { class: 'vault-row-actions' }, previewBtn, exportBtn, deleteBtn)));
     }));
 
   const table = h('table', { class: 'table vault-table' }, tableHead, tableBody);

@@ -37,8 +37,8 @@ public static class IsoStreamCopier {
 
 $fsi = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
 $fsi.VolumeName = $VolumeLabel
-$fsi.ChooseImageDefaultsForMediaType(12)
-$fsi.FileSystemsToCreate = 7 # ISO9660 + Joliet + UDF
+$fsi.ChooseImageDefaultsForMediaType(6)
+$fsi.FileSystemsToCreate = 7
 
 $fsi.Root.AddTree($Source, $false)
 
