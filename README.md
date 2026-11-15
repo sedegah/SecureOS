@@ -59,6 +59,7 @@ to hide what you do.
 - [Technical notes](docs/README.md) — building a drive from source
 
 ![alt text](image.png)
+![alt text](image-1.png)
 
 ## Release Policy
 

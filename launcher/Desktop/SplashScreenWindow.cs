@@ -117,3 +117,4 @@ internal sealed class SplashScreenWindow : Window
         });
     }
 }
+
