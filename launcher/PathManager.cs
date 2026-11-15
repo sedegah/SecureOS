@@ -35,7 +35,7 @@ internal sealed class PathManager
 
     private static readonly HashSet<string> SystemDirectories = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Interface", "Browser", "Data", "Licenses", "resources", "locales",
+        "Interface", "Browser", "Data", "Licenses", "resources", "locales", "boot", "efi", "assets",
         "bin", "obj", "node_modules", "packaging", "launcher", "installer", "desktop", "scratch", "build",
     };
 
@@ -45,13 +45,14 @@ internal sealed class PathManager
         "app.zip", "portable.flag", "installed.flag", "README.txt",
         "serve.mjs", "package.json", "package-lock.json",
         "desktop.cjs", "workspace-preload.cjs", "main.cjs", "browser-preload.cjs",
-        "license", "license.txt", "license.rtf"
+        "license", "license.txt", "license.rtf", "licenses.chromium", "licenses.chromium.html",
+        "autorun.inf", "autorun.ico", "version"
     };
 
     private static readonly HashSet<string> SystemExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".exe", ".dll", ".sys", ".drv", ".com", ".pak", ".bin", ".dat", ".pdb", ".flag", ".node",
-        ".cs", ".csproj", ".sln", ".mjs", ".cjs"
+        ".cs", ".csproj", ".sln", ".mjs", ".cjs", ".inf"
     };
 
     public bool IsSystemOrCodeItem(string name, bool isDirectory)

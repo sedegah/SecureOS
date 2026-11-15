@@ -22,6 +22,14 @@ internal sealed class DocumentStore(PathManager paths)
         _ => throw new ArgumentException("Unknown document.", nameof(name)),
     };
 
+    public void Delete(string name)
+    {
+        string target = PathFor(name);
+        if (File.Exists(target)) File.Delete(target);
+        string backup = target + ".bak";
+        if (File.Exists(backup)) File.Delete(backup);
+    }
+
     public DocumentRead Read(string name)
     {
         string target = PathFor(name);

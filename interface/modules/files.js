@@ -40,13 +40,15 @@ async function refresh() {
 }
 
 const SYSTEM_NAMES = new Set([
-  'interface', 'browser', 'data', 'licenses', 'resources', 'locales',
+  'interface', 'browser', 'data', 'licenses', 'resources', 'locales', 'boot', 'efi', 'assets',
   'bin', 'obj', 'node_modules', 'packaging', 'launcher', 'installer', 'desktop', 'build', 'scratch',
   'surge.exe', 'uninstall.exe', 'surge-setup.exe', 'surgeos-portable.iso',
   'app.zip', 'serve.mjs', 'package.json', 'package-lock.json', 'readme.txt',
-  'desktop.cjs', 'workspace-preload.cjs', 'main.cjs', 'browser-preload.cjs', 'portable.flag', 'installed.flag'
+  'desktop.cjs', 'workspace-preload.cjs', 'main.cjs', 'browser-preload.cjs', 'portable.flag', 'installed.flag',
+  'license', 'license.txt', 'license.rtf', 'licenses.chromium', 'licenses.chromium.html',
+  'autorun.inf', 'autorun.ico', 'version'
 ]);
-const SYSTEM_EXTS = new Set(['exe', 'dll', 'sys', 'drv', 'pak', 'bin', 'dat', 'pdb', 'flag', 'node', 'cs', 'csproj', 'sln', 'mjs', 'cjs']);
+const SYSTEM_EXTS = new Set(['exe', 'dll', 'sys', 'drv', 'pak', 'bin', 'dat', 'pdb', 'flag', 'node', 'cs', 'csproj', 'sln', 'mjs', 'cjs', 'inf']);
 
 function isSystemEntry(entry) {
   const name = (entry.name || '').toLowerCase();

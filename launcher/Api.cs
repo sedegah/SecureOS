@@ -119,6 +119,9 @@ internal sealed class Api(PathManager paths, DocumentStore documents, FileOperat
             if (path == "/api/biometric/verify" && method == "POST")
                 return BiometricVerify(body);
 
+            if (path == "/api/system/reset" && method == "POST")
+                return SystemReset(body);
+
             if (path.StartsWith("/api/files/", StringComparison.Ordinal) && method == "POST")
                 return FileAction(path["/api/files/".Length..], body);
 
