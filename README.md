@@ -6,8 +6,8 @@ Plug the drive into any Windows computer, open **Surge.exe**, and you have a ful
 
 Unplug the drive and everything goes with you.
 
-![Surge Workspace](image.png)
-![Surge Browser](image-1.png)
+![Surge Workspace](assets/image.png)
+![Surge Browser](assets/image-1.png)
 
 ---
 

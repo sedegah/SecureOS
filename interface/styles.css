@@ -1446,7 +1446,7 @@ textarea.input { resize: vertical; min-height: 120px; line-height: 1.5; }
   flex-direction: column;
   gap: 16px;
   padding: 16px 0;
-  max-width: 1040px;
+  width: 100%;
 }
 
 .browser-search-card {
