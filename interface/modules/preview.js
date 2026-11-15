@@ -90,3 +90,4 @@ export function showPreview({ title, blob, ext = null, size = null, onDownload =
   document.body.append(overlay);
   closeBtn.focus();
 }
+
